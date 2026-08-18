@@ -23,43 +23,55 @@ interface TradeLensProps {
   onSelectProduct: (hs4: string) => void;
 }
 
-interface LensBar {
+interface LensProduct {
   hs4: string;
+  name: string;
   exports: number;
   exportShare: number;
+  color: string;
   isOther: boolean;
+}
+
+interface OtherBreakdownItem extends LensProduct {
+  isResidual: boolean;
+}
+
+interface CountryFact {
+  label: string;
+  value: string;
+  definition?: string;
+  status?: string;
+  tone?: "positive" | "negative";
 }
 
 function shortLabel(value: string, limit: number): string {
   return value.length <= limit ? value : `${value.slice(0, limit - 1).trimEnd()}…`;
 }
 
-function useAnimatedLengths(targets: number[]): number[] {
-  const [values, setValues] = useState(targets);
-  const currentRef = useRef(targets);
+function percentDigits(value: number): number {
+  return value > 0 && value < 0.01 ? 2 : 1;
+}
+
+function useAnimatedPercentages(targets: number[], resetKey: string): number[] {
+  const [values, setValues] = useState(() => targets.map(() => 0));
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      const frame = requestAnimationFrame(() => {
-        currentRef.current = targets;
-        setValues(targets);
-      });
+      const frame = requestAnimationFrame(() => setValues(targets));
       return () => cancelAnimationFrame(frame);
     }
-    const from = currentRef.current.length === targets.length ? currentRef.current : targets;
+
     const started = performance.now();
     let frame = 0;
     const tick = (now: number) => {
-      const progress = Math.min(1, (now - started) / 320);
+      const progress = Math.min(1, (now - started) / 560);
       const eased = 1 - Math.pow(1 - progress, 3);
-      const next = targets.map((target, index) => (from[index] ?? target) + (target - (from[index] ?? target)) * eased);
-      currentRef.current = next;
-      setValues(next);
+      setValues(targets.map((target) => target * eased));
       if (progress < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [targets]);
+  }, [resetKey, targets]);
 
   return values;
 }
@@ -75,8 +87,10 @@ export function TradeLens({
   onSelectProduct,
 }: TradeLensProps) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const closeOtherTimerRef = useRef<number | null>(null);
   const [size, setSize] = useState({ width: 1200, height: 820 });
-  const [hovered, setHovered] = useState<number | null>(null);
+  const [hoveredHs4, setHoveredHs4] = useState<string | null>(null);
+  const [otherExpanded, setOtherExpanded] = useState(false);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -88,56 +102,117 @@ export function TradeLens({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => () => {
+    if (closeOtherTimerRef.current !== null) window.clearTimeout(closeOtherTimerRef.current);
+  }, []);
+
+  const openOtherBreakdown = () => {
+    if (closeOtherTimerRef.current !== null) window.clearTimeout(closeOtherTimerRef.current);
+    closeOtherTimerRef.current = null;
+    setHoveredHs4("other");
+    setOtherExpanded(true);
+  };
+
+  const closeOtherBreakdown = () => {
+    if (closeOtherTimerRef.current !== null) window.clearTimeout(closeOtherTimerRef.current);
+    closeOtherTimerRef.current = window.setTimeout(() => {
+      setHoveredHs4(null);
+      setOtherExpanded(false);
+      closeOtherTimerRef.current = null;
+    }, 120);
+  };
+
   const mobile = size.width < 700;
-  const visibleCount = mobile ? 9 : 13;
-  const bars = useMemo<LensBar[]>(() => {
-    if (!country || !fingerprint) return [];
-    const sorted = [...fingerprint.products].sort((a, b) => b.exports - a.exports);
-    const top = sorted.slice(0, visibleCount).map((item) => ({
-      hs4: item.hs4,
-      exports: item.exports,
-      exportShare: item.exportShare,
-      isOther: false,
-    }));
+  const compact = size.width < 1050;
+  const visibleProductCount = mobile ? 4 : compact ? 5 : 6;
+  const { lensProducts, otherBreakdown } = useMemo<{
+    lensProducts: LensProduct[];
+    otherBreakdown: OtherBreakdownItem[];
+  }>(() => {
+    if (!country || !fingerprint) return { lensProducts: [], otherBreakdown: [] };
+    const enrichProduct = (item: Hs4LensCountry["products"][number]): LensProduct => {
+        const meta = products.get(item.hs4);
+        const sectionIndex = meta ? Math.max(0, Number(meta.sectionId) - 1) : 20;
+        return {
+          ...item,
+          name: meta?.name ?? item.hs4,
+          color: SECTION_COLORS[sectionIndex],
+          isOther: false,
+        };
+    };
+    const rankedProducts = [...fingerprint.products].sort((a, b) => b.exports - a.exports);
+    const top = rankedProducts.slice(0, visibleProductCount).map(enrichProduct);
+    const breakdown: OtherBreakdownItem[] = rankedProducts
+      .slice(visibleProductCount)
+      .map((item) => ({ ...enrichProduct(item), isResidual: false }));
     const visibleExports = top.reduce((sum, item) => sum + item.exports, 0);
-    const exports = Math.max(0, country.exports - visibleExports);
-    if (exports > 0) {
+    const otherExports = Math.max(0, country.exports - visibleExports);
+    if (otherExports > 0) {
       top.push({
         hs4: "other",
-        exports,
-        exportShare: country.exports ? exports / country.exports : 0,
+        name: "All other products",
+        exports: otherExports,
+        exportShare: country.exports ? otherExports / country.exports : 0,
+        color: "#7b8782",
         isOther: true,
       });
     }
-    return top;
-  }, [country, fingerprint, visibleCount]);
+    const rankedExports = rankedProducts.reduce((sum, item) => sum + item.exports, 0);
+    const residualExports = Math.max(0, country.exports - rankedExports);
+    if (residualExports > 0) {
+      breakdown.push({
+        hs4: "remainder",
+        name: "Remaining products",
+        exports: residualExports,
+        exportShare: country.exports ? residualExports / country.exports : 0,
+        color: "#7b8782",
+        isOther: true,
+        isResidual: true,
+      });
+    }
+    return { lensProducts: top, otherBreakdown: breakdown };
+  }, [country, fingerprint, products, visibleProductCount]);
 
-  const maxExports = bars[0]?.exports || 1;
-  const targetLengths = useMemo(
-    () => bars.map((bar) => bar.isOther ? (mobile ? 16 : 20) : 28 + Math.sqrt(bar.exports / maxExports) * (mobile ? 62 : 122)),
-    [bars, maxExports, mobile],
+  const targetPercentages = useMemo(
+    () => lensProducts.map((product) => product.exportShare),
+    [lensProducts],
   );
-  const lengths = useAnimatedLengths(targetLengths);
-  const center = { x: size.width / 2, y: size.height * (mobile ? 0.42 : 0.48) };
+  const animationKey = `${country?.iso3 ?? "ocean"}-${year}`;
+  const animatedPercentages = useAnimatedPercentages(targetPercentages, animationKey);
+  const center = { x: size.width / 2, y: size.height * (mobile ? 0.43 : 0.48) };
   const lensRadius = mobile ? 78 : Math.min(118, Math.max(96, size.height * 0.14));
-  const innerRadius = lensRadius + (mobile ? 24 : 34);
-  const startAngle = mobile ? 212 : 205;
-  const endAngle = mobile ? 328 : 335;
-  const angleStep = bars.length > 1 ? (endAngle - startAngle) / (bars.length - 1) : 0;
-  const annotationTop = center.y + lensRadius + (mobile ? 17 : 20);
-  const hoveredBar = hovered === null ? null : bars[hovered];
-  const hoveredName = hoveredBar
-    ? hoveredBar.isOther ? "Other exports" : products.get(hoveredBar.hs4)?.name ?? hoveredBar.hs4
-    : null;
+  const outerRadius = mobile ? 158 : compact ? 210 : Math.min(278, Math.max(238, size.height * 0.31));
+  const startAngle = mobile ? 202 : 198;
+  const endAngle = mobile ? 338 : 342;
+  const angleStep = lensProducts.length > 1 ? (endAngle - startAngle) / (lensProducts.length - 1) : 0;
+  const annotationTop = center.y + lensRadius + (mobile ? 12 : 13);
+  const otherPanelWidth = mobile ? 178 : compact ? 220 : 248;
+  const otherAngle = endAngle * Math.PI / 180;
+  const otherLabelX = center.x + Math.cos(otherAngle) * outerRadius;
+  const otherLabelY = center.y + Math.sin(otherAngle) * outerRadius;
+  const otherPanelLeft = Math.min(otherLabelX, size.width - otherPanelWidth - 12);
+  const otherPanelTop = otherLabelY + (mobile ? 27 : 30);
+  const otherPanelHeight = Math.min(
+    otherBreakdown.length * 12 + (mobile ? 27 : 28),
+    Math.max(210, size.height - otherPanelTop - 70),
+  );
+  const hoveredProduct = lensProducts.find((product) => product.hs4 === hoveredHs4) ?? null;
   const leadingName = fingerprint?.leadingHs4 ? products.get(fingerprint.leadingHs4)?.name ?? null : null;
   const countryName = countryMeta ? displayCountryName(countryMeta.iso3, countryMeta.name) : null;
+  const netStatus = country ? country.net >= 0 ? "Trade surplus" : "Trade deficit" : "";
 
-  const facts = country ? [
-    ["Exports", formatCurrency(country.exports)],
-    ["Imports", formatCurrency(country.imports)],
-    ["Net exports", formatCurrency(country.net)],
-    ["Leading product", leadingName ?? "—"],
-    ["Leading destination", destinationName ?? "—"],
+  const facts: CountryFact[] = country ? [
+    { label: "Exports", value: formatCurrency(country.exports) },
+    { label: "Imports", value: formatCurrency(country.imports) },
+    {
+      label: "Net exports",
+      definition: "Exports − imports",
+      value: formatCurrency(country.net),
+      status: netStatus,
+      tone: country.net >= 0 ? "positive" : "negative",
+    },
+    { label: "Leading product", value: leadingName ?? "—" },
+    { label: "Leading destination", value: destinationName ?? "—" },
   ] : [];
 
   return (
@@ -145,7 +220,7 @@ export function TradeLens({
       <svg
         className="trade-lens-svg"
         viewBox={`0 0 ${size.width} ${size.height}`}
-        aria-label={countryName ? `${countryName} export fingerprint` : "Country selection lens"}
+        aria-label={countryName ? `${countryName} export basket` : "Country selection lens"}
       >
         <defs>
           <mask id="trade-focus-mask">
@@ -170,113 +245,163 @@ export function TradeLens({
           <circle cx={center.x} cy={center.y} r={2.7} />
         </g>
 
-        <g className="trade-bars">
-          {bars.map((bar, index) => {
+        <g className="trade-readouts" aria-label="Leading HS4 products as a share of total merchandise exports">
+          {lensProducts.map((product, index) => {
             const degrees = startAngle + index * angleStep;
             const angle = degrees * Math.PI / 180;
-            const length = lengths[index] ?? targetLengths[index];
-            const x1 = center.x + Math.cos(angle) * innerRadius;
-            const y1 = center.y + Math.sin(angle) * innerRadius;
-            const x2 = center.x + Math.cos(angle) * (innerRadius + length);
-            const y2 = center.y + Math.sin(angle) * (innerRadius + length);
-            const meta = products.get(bar.hs4);
-            const sectionIndex = meta ? Math.max(0, Number(meta.sectionId) - 1) : 20;
-            const name = bar.isOther ? "Other exports" : meta?.name ?? bar.hs4;
-            const showLabel = !mobile && index < 5;
-            const labelX = center.x + Math.cos(angle) * (innerRadius + length + 15);
-            const labelY = center.y + Math.sin(angle) * (innerRadius + length + 15);
+            const stemStart = lensRadius + (mobile ? 13 : 17);
+            const stemEnd = outerRadius - (mobile ? 19 : 25);
+            const x1 = center.x + Math.cos(angle) * stemStart;
+            const y1 = center.y + Math.sin(angle) * stemStart;
+            const x2 = center.x + Math.cos(angle) * stemEnd;
+            const y2 = center.y + Math.sin(angle) * stemEnd;
+            const labelX = center.x + Math.cos(angle) * outerRadius;
+            const labelY = center.y + Math.sin(angle) * outerRadius;
+            const horizontal = Math.cos(angle);
+            const textAnchor = horizontal < -0.22 ? "end" : horizontal > 0.22 ? "start" : "middle";
+            const name = shortLabel(product.name, mobile ? 17 : 23);
+            const animatedShare = animatedPercentages[index] ?? product.exportShare;
+            const percentage = formatPercent(animatedShare, percentDigits(product.exportShare));
+
             return (
               <g
-                key={`${bar.hs4}-${index}`}
-                className={`trade-bar${bar.isOther ? " trade-bar-other" : ""}`}
+                key={`${animationKey}-${product.hs4}`}
+                className={`trade-readout${product.isOther ? " trade-readout-other" : ""}${hoveredHs4 === product.hs4 ? " is-active" : ""}${hoveredHs4 && hoveredHs4 !== product.hs4 ? " is-muted" : ""}`}
+                style={{ animationDelay: `${index * 45}ms` }}
               >
+                <line x1={x1} y1={y1} x2={x2} y2={y2} className="trade-readout-stem-halo" />
                 <line
                   x1={x1}
                   y1={y1}
                   x2={x2}
                   y2={y2}
-                  className="trade-bar-hit"
-                  role={bar.isOther ? undefined : "button"}
-                  tabIndex={bar.isOther ? undefined : 0}
-                  aria-label={`${name}: ${formatCurrency(bar.exports)}, ${formatPercent(bar.exportShare)} of exports`}
-                  onMouseEnter={() => setHovered(index)}
-                  onMouseLeave={() => setHovered(null)}
-                  onFocus={() => setHovered(index)}
-                  onBlur={() => setHovered(null)}
-                  onClick={() => !bar.isOther && onSelectProduct(bar.hs4)}
+                  pathLength={1}
+                  className="trade-readout-stem"
+                  stroke={product.color}
+                />
+                <circle cx={x1} cy={y1} r={mobile ? 3 : 4} fill={product.color} className="trade-readout-origin" />
+                <g
+                  className="trade-readout-label"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={product.isOther ? otherExpanded : undefined}
+                  aria-haspopup={product.isOther ? "true" : undefined}
+                  aria-label={`${product.name}: ${formatCurrency(product.exports)}, ${formatPercent(product.exportShare, percentDigits(product.exportShare))} of total exports`}
+                  onPointerEnter={() => product.isOther ? openOtherBreakdown() : setHoveredHs4(product.hs4)}
+                  onPointerLeave={() => product.isOther ? closeOtherBreakdown() : setHoveredHs4(null)}
+                  onFocus={() => product.isOther ? openOtherBreakdown() : setHoveredHs4(product.hs4)}
+                  onBlur={() => product.isOther ? closeOtherBreakdown() : setHoveredHs4(null)}
+                  onClick={() => product.isOther ? openOtherBreakdown() : onSelectProduct(product.hs4)}
                   onKeyDown={(event) => {
-                    if (!bar.isOther && (event.key === "Enter" || event.key === " ")) {
+                    if (!product.isOther && (event.key === "Enter" || event.key === " ")) {
                       event.preventDefault();
-                      onSelectProduct(bar.hs4);
+                      onSelectProduct(product.hs4);
                     }
                   }}
-                />
-                <line x1={x1} y1={y1} x2={x2} y2={y2} className="trade-bar-track" />
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  className="trade-bar-value"
-                  stroke={bar.isOther ? "#8c9691" : SECTION_COLORS[sectionIndex]}
-                  opacity={hovered !== null && hovered !== index ? 0.34 : 1}
-                />
-                {!bar.isOther && (
-                  <text x={x1} y={y1} className="trade-bar-code" textAnchor="middle" dy="0.35em">
-                    {bar.hs4}
+                >
+                  <rect
+                    x={textAnchor === "end" ? labelX - (mobile ? 102 : 132) : textAnchor === "start" ? labelX : labelX - (mobile ? 51 : 66)}
+                    y={labelY - (mobile ? 19 : 23)}
+                    width={mobile ? 102 : 132}
+                    height={mobile ? 56 : 65}
+                    className="trade-readout-hit"
+                  />
+                  <text x={labelX} y={labelY} textAnchor={textAnchor} className="trade-readout-percent">
+                    {percentage}
                   </text>
-                )}
-                {showLabel && (
-                  <text
-                    x={labelX}
-                    y={labelY}
-                    className="trade-bar-label"
-                    textAnchor={labelX < center.x ? "end" : "start"}
-                  >
-                    {shortLabel(name, 20)}
+                  <text x={labelX} y={labelY + (mobile ? 13 : 15)} textAnchor={textAnchor} className="trade-readout-name">
+                    {product.isOther ? name : `${product.hs4} · ${name}`}
                   </text>
-                )}
-                <title>{`${name}: ${formatCurrency(bar.exports)} (${formatPercent(bar.exportShare)})`}</title>
+                  <text x={labelX} y={labelY + (mobile ? 25 : 29)} textAnchor={textAnchor} className="trade-readout-value">
+                    {formatCurrency(product.exports)} exports
+                  </text>
+                </g>
+                <title>{`${product.name}: ${formatCurrency(product.exports)} (${formatPercent(product.exportShare, percentDigits(product.exportShare))} of total exports)`}</title>
               </g>
             );
           })}
         </g>
       </svg>
 
+      {country && otherBreakdown.length > 0 && (
+        <section
+          className={`other-breakdown${otherExpanded ? " is-open" : ""}`}
+          style={{
+            left: otherPanelLeft,
+            top: otherPanelTop,
+            width: otherPanelWidth,
+            maxHeight: otherExpanded ? otherPanelHeight : 0,
+          }}
+          aria-label="All other products breakdown"
+          aria-hidden={!otherExpanded}
+          onPointerEnter={openOtherBreakdown}
+          onPointerLeave={closeOtherBreakdown}
+        >
+          <header>
+            <strong>Next {otherBreakdown.filter((item) => !item.isResidual).length} products</strong>
+            <span>Share of total exports</span>
+          </header>
+          <ol>
+            {otherBreakdown.map((item, index) => (
+              <li
+                key={item.hs4}
+                className={item.isResidual ? "is-residual" : undefined}
+                style={{
+                  transitionDelay: otherExpanded
+                    ? `${index * 18}ms`
+                    : `${(otherBreakdown.length - index) * 7}ms`,
+                }}
+              >
+                <span className="other-breakdown-rank">{item.isResidual ? "…" : index + visibleProductCount + 1}</span>
+                <span className="other-breakdown-name">
+                  {item.isResidual ? item.name : `${item.hs4} · ${shortLabel(item.name, mobile ? 19 : 27)}`}
+                </span>
+                <strong>{formatPercent(item.exportShare, percentDigits(item.exportShare))}</strong>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       {country && countryName && (
-      <div className="lens-callout" style={{ left: center.x, top: annotationTop }} aria-live="polite">
-        <div className="lens-callout-country">
-          <span>Country / {year}{provisional ? " / provisional" : ""}</span>
-          <h1>{countryName}</h1>
+        <div className="lens-callout" style={{ left: center.x, top: annotationTop }} aria-live="polite">
+          <div className="lens-callout-country">
+            <span>Country / {year}{provisional ? " / provisional" : ""}</span>
+            <h1>{countryName}</h1>
+          </div>
+          <div className="lens-callout-detail">
+            {hoveredProduct ? (
+              <>
+                <small>{hoveredProduct.isOther ? "Export basket remainder" : `HS4 ${hoveredProduct.hs4} / share of exports`}</small>
+                <strong>{shortLabel(hoveredProduct.name, mobile ? 24 : 36)}</strong>
+                <span>{formatCurrency(hoveredProduct.exports)} · {formatPercent(hoveredProduct.exportShare, percentDigits(hoveredProduct.exportShare))} of total exports</span>
+              </>
+            ) : (
+              <>
+                <small>Total merchandise exports</small>
+                <strong>{formatCurrency(country.exports)}</strong>
+                <span>Product % = share of this country&apos;s total exports.</span>
+              </>
+            )}
+          </div>
         </div>
-        <div className="lens-callout-detail">
-          {hoveredBar ? (
-            <>
-              <small>{hoveredBar.isOther ? "Export group" : `HS4 / ${hoveredBar.hs4}`}</small>
-              <strong>{shortLabel(hoveredName ?? "", mobile ? 22 : 30)}</strong>
-              <span>{formatCurrency(hoveredBar.exports)} · {formatPercent(hoveredBar.exportShare)}</span>
-            </>
-          ) : (
-            <>
-              <small>Merchandise exports</small>
-              <strong>{formatCurrency(country.exports)}</strong>
-            </>
-          )}
-        </div>
-      </div>
       )}
 
       {country && (
-      <dl className="country-facts">
-        {facts.map(([label, value], index) => (
-          <div key={label} className={index > 2 ? "secondary-fact" : undefined}>
-            <dt>{label}</dt>
-            <dd className={label === "Net exports" ? (country.net >= 0 ? "positive" : "negative") : undefined}>
-              {shortLabel(value, 26)}
-            </dd>
-          </div>
-        ))}
-      </dl>
+        <dl className="country-facts">
+          {facts.map((fact, index) => (
+            <div key={fact.label} className={index > 2 ? "secondary-fact" : undefined}>
+              <dt>
+                {fact.label}
+                {fact.definition && <small>{fact.definition}</small>}
+              </dt>
+              <dd className={fact.tone}>
+                {shortLabel(fact.value, 26)}
+                {fact.status && <small className="fact-status">{fact.status}</small>}
+              </dd>
+            </div>
+          ))}
+        </dl>
       )}
     </div>
   );

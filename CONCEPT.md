@@ -63,17 +63,17 @@ The map and HUD use the same viewport coordinate system but remain separate rend
 
 ### Export fingerprint
 
-A radial semicircle wraps around the top of the country lens.
+A radial semicircle of product readouts wraps around the top of the country lens.
 
-- Largest HS4 export begins at the upper-left.
-- Categories decrease clockwise toward the upper-right.
-- The top 12–14 categories are shown, followed by **Other**.
-- Bar length represents export value relative to the country’s leading category.
-- Bar color represents the broad HS section.
-- Stable bar slots animate between country and year values.
-- Hover/focus reveals product name, value, and export-basket share.
+- The largest HS4 export begins at the upper-left and products decrease clockwise.
+- Desktop shows the six leading products; narrower layouts reduce the count before adding **All other products**.
+- Every readout persistently shows the HS4 product name, its exact share of the country's total exports, and its export value.
+- Broad HS sections provide restrained spoke colors; color is supportive rather than the primary encoding.
+- Readouts draw in sequentially and percentages count up when the country or year changes.
+- Hover/focus emphasizes one product and repeats its full definition in the annotation below the lens.
 - Selecting a product opens it in Product Overlay mode.
-- Persistent labels are limited to the most important categories to prevent clutter.
+- **All other products** is neutral and accounts for the remainder of the export basket.
+- Hovering or focusing **All other products** opens a downward ranked breakdown of the remaining retained HS4 headings and percentages; the final residual keeps the totals complete.
 
 ### Country information
 
@@ -81,7 +81,7 @@ The lens and nearby annotations show:
 
 - Country name and total merchandise exports
 - Total merchandise imports
-- Net merchandise exports
+- Net merchandise exports, explicitly defined as exports minus imports and identified as a trade surplus or deficit
 - Leading HS4 product
 - Leading destination
 - Selected year and provisional status
@@ -193,7 +193,7 @@ This preserves a static, backend-free runtime while avoiding a single all-years,
 - Next.js App Router and TypeScript
 - React client component for the interactive explorer
 - MapLibre GL JS for the flat basemap and geographic layers
-- A single responsive SVG HUD for the lens, radial bars, wash, and chart labels
+- A single responsive SVG HUD for the lens, radial percentage readouts, wash, and chart labels
 - Focused D3 scale/color modules for quantitative encodings
 - Typed local state; no Redux or application server
 - URL parameters for shareable state
@@ -227,9 +227,9 @@ Exit condition: the detailed flat basemap renders and countries can be queried r
 ### Phase 2 — Integrated Country Lens
 
 - Replace the center reticle and detached chart card with a single viewport-sized trade lens.
-- Add the focus wash, circular cutout, active-country treatment, country labels, radial export bars, and annotations.
+- Add the focus wash, circular cutout, active-country treatment, country labels, radial export readouts, and annotations.
 - Update selection continuously as the map crosses a country boundary.
-- Add stable animated transitions and bar interactions.
+- Add sequential entrance transitions, percentage count-ups, and product interactions.
 
 Exit condition: dragging between countries changes the export fingerprint in place around the lens.
 
@@ -275,7 +275,7 @@ The prototype succeeds when a user can:
 1. Drag the map and watch the centered country fingerprint change immediately.
 2. Read the selected country’s largest exports directly around the map lens.
 3. Move through every available year with the carousel.
-4. Select a radial HS4 bar and see its worldwide export pattern.
+4. Select a radial HS4 readout and see its worldwide export pattern.
 5. Change overlay metrics and inspect country values without leaving the map.
 6. Use the experience on desktop and mobile without stale panels or duplicated controls.
 

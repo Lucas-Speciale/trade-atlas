@@ -8,7 +8,8 @@ The runtime is deliberately small: there is no application API, database, or arb
 
 - MapLibre flat Mercator map using OpenFreeMap's Liberty style
 - Viewport-anchored country lens with a translucent focus wash
-- Clockwise, decreasing radial export bars around the active country
+- Dynamic radial product readouts with export-basket shares and values
+- Hover expansion from **All other products** into the next ranked HS4 products
 - Continuous country selection as the map moves beneath the lens
 - Lens-center country selection and country search
 - Draggable, scrollable, keyboard-accessible year carousel for 2017–2024
@@ -51,12 +52,12 @@ Local World Bank country GeoJSON
                 │
                 ▼
 React SVG/HTML HUD: focus wash, country lens,
-radial exports, overlay controls, and year carousel
+radial readouts, overlay controls, and year carousel
 ```
 
 MapLibre owns projection, map movement, labels, geographic layers, and pointer feature events. React owns application state and the viewport-sized HUD. During movement, the lens center is converted back to longitude/latitude and checked against a precomputed local Admin 0 polygon index. In country mode the pointer only drags or zooms the map; search can move a country into the lens. When the lens is over ocean, the country fingerprint and statistics clear.
 
-The country lens uses stable radial slots, so values transition in place. The largest HS4 export starts at the upper-left and values decrease clockwise. The terminal **Other** marker is intentionally short and neutral because it aggregates the remainder of the country's export basket rather than representing one comparable HS4 heading.
+The country lens arranges the leading HS4 products clockwise across its upper semicircle. Each readout names the product, shows its exact share of the country's total merchandise exports, and includes the underlying export value. Readouts draw and count up when the selected country or year changes. A neutral **All other products** readout accounts for the remainder of the export basket; hovering or focusing it flows open the remaining retained HS4 rankings and an honest residual for products below the compact fingerprint.
 
 The UI calculates grouped agriculture/food and HS2 overlays in memory. Changing year loads one immutable HS2 annual file plus a compact file containing each country's leading HS4 products; neighboring years are prefetched and cached. Selecting an HS4 product lazily loads only its year and parent-HS2 partition, then calculates country measures and ranks in the browser.
 

@@ -112,6 +112,7 @@ function fillExpression(
   values: Map<string, { color: string; value: number }>,
 ): unknown[] | string {
   if (mode !== "overlay") return "rgba(246, 241, 229, 0.08)";
+  if (values.size === 0) return "rgba(224, 222, 213, 0.72)";
   const expression: unknown[] = ["match", ["get", "tradeIso3"]];
   values.forEach(({ color }, iso3) => expression.push(iso3, color));
   expression.push("rgba(224, 222, 213, 0.72)");
