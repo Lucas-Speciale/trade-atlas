@@ -347,6 +347,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .view-dock {
   top: 20px;
   right: 22px;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -383,6 +384,120 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
   color: var(--ink);
   box-shadow: 0 2px 8px rgba(23, 35, 31, 0.12);
 }
+
+.guide-toggle {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.guide-toggle:hover,
+.guide-toggle[aria-expanded="true"] { background: rgba(23, 35, 31, 0.065); color: var(--ink); }
+.guide-toggle > span {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(23, 35, 31, 0.42);
+  border-radius: 50%;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.72rem;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+}
+.guide-toggle > strong { font-size: 0.72rem; font-weight: 760; }
+
+.guide-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(310px, calc(100vw - 44px));
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 15px;
+  background: rgba(255, 253, 247, 0.95);
+  box-shadow: 0 18px 50px rgba(23, 35, 31, 0.2);
+  color: var(--ink);
+  text-align: left;
+  backdrop-filter: blur(16px);
+  animation: guide-popover-enter 260ms cubic-bezier(0.18, 0.78, 0.22, 1) both;
+}
+.guide-popover header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.guide-popover header > div { display: grid; gap: 2px; }
+.guide-popover header span,
+.guide-actions strong {
+  color: var(--accent-dark);
+  font-size: 0.56rem;
+  font-weight: 820;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.guide-popover h3 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+.guide-close {
+  display: grid;
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.12rem;
+  line-height: 1;
+}
+.guide-close:hover { background: rgba(23, 35, 31, 0.07); color: var(--ink); }
+.guide-summary {
+  margin: 12px 0 0;
+  color: #44524d;
+  font-size: 0.7rem;
+  line-height: 1.48;
+}
+.guide-actions {
+  display: grid;
+  gap: 9px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 35, 31, 0.13);
+}
+.guide-actions section { display: grid; gap: 3px; }
+.guide-actions p {
+  margin: 0;
+  color: #44524d;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+.guide-popover > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 13px;
+  color: var(--ink);
+  font-size: 0.62rem;
+  font-weight: 760;
+  text-decoration-color: rgba(23, 35, 31, 0.3);
+  text-underline-offset: 3px;
+}
+.guide-popover > a:hover { color: var(--accent-dark); }
 
 .product-picker {
   display: grid;
@@ -1014,6 +1129,10 @@ dd {
 @keyframes route-row-arrive {
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes guide-popover-enter {
+  from { opacity: 0; transform: translateY(-8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 @media (max-width: 900px) {
   .brand-panel { max-width: 330px; }
@@ -1029,8 +1148,22 @@ dd {
   .brand-panel { top: 14px; left: 14px; max-width: 170px; }
   .brand-panel h2 { font-size: 1.8rem; }
   .brand-copy > p:last-child { display: none; }
-  .view-dock { top: 10px; right: 10px; display: grid; gap: 6px; padding: 6px; }
+  .view-dock { top: 10px; right: 10px; gap: 5px; padding: 6px; }
   .mode-switch button { min-height: 30px; padding-inline: 8px; font-size: 0.66rem; }
+  .guide-toggle { width: 30px; min-height: 30px; justify-content: center; padding: 0; }
+  .guide-toggle > strong { display: none; }
+  .guide-toggle > span { width: 17px; height: 17px; font-size: 0.66rem; }
+  .guide-popover {
+    top: calc(100% + 7px);
+    right: 0;
+    width: min(310px, calc(100vw - 20px));
+    padding: 13px;
+  }
+  .guide-popover h3 { font-size: 1.2rem; }
+  .guide-summary { margin-top: 9px; font-size: 0.65rem; }
+  .guide-actions { gap: 7px; margin-top: 10px; padding-top: 10px; }
+  .guide-actions p { font-size: 0.63rem; }
+  .guide-popover > a { margin-top: 10px; }
   .trade-readout-percent { stroke-width: 4px; font-size: 16px; }
   .trade-readout-name { stroke-width: 3px; font-size: 6.3px; }
   .trade-readout-value { stroke-width: 2.5px; font-size: 5.7px; }

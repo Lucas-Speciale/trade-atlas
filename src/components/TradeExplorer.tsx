@@ -5,6 +5,7 @@ import { interpolateRdBu, interpolateYlGnBu } from "d3-scale-chromatic";
 import { scaleDivergingSymlog, scaleSequentialSqrt } from "d3-scale";
 
 import { TradeLens } from "@/components/TradeLens";
+import { TradeGuide } from "@/components/TradeGuide";
 import { TradeMap } from "@/components/TradeMap";
 import { YearCarousel } from "@/components/YearCarousel";
 import { displayCountryName } from "@/lib/countryNames";
@@ -615,7 +616,11 @@ export function TradeExplorer() {
                 </>
               )}
             </h2>
-            <p>{mode === "country" ? "Drag the map beneath the lens." : "Compare one product’s trade across every country."}</p>
+            <p>
+              {mode === "country"
+                ? "Drag the map. Select a percentage to compare worldwide."
+                : "Select a country to trace this product’s top trade routes."}
+            </p>
           </header>
 
           {mode === "overlay" && (
@@ -662,12 +667,7 @@ export function TradeExplorer() {
           )}
         </div>
 
-        <nav className="view-dock" aria-label="Explorer controls">
-          <div className="mode-switch" aria-label="View mode">
-            <button type="button" className={mode === "country" ? "active" : ""} onClick={() => selectMode("country")}>Country lens</button>
-            <button type="button" className={mode === "overlay" ? "active" : ""} onClick={() => selectMode("overlay")}>Product overlay</button>
-          </div>
-        </nav>
+        <TradeGuide mode={mode} onSelectMode={selectMode} />
 
         {mode === "country" && (
           <TradeLens
