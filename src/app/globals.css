@@ -72,9 +72,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
   pointer-events: none;
 }
 .trade-route-shadow,
-.trade-route-line,
-.trade-route-connector-shadow,
-.trade-route-connector {
+.trade-route-line {
   fill: none;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -114,17 +112,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
   stroke-width: 2.5;
 }
 .trade-route-layer.is-imports .trade-route-origin { stroke: #155a80; }
-.trade-route-connector-shadow,
-.trade-route-connector { animation-delay: 320ms; }
-.trade-route-connector-shadow {
-  stroke: rgba(255, 253, 247, 0.88);
-  stroke-width: 5;
-}
-.trade-route-connector {
-  stroke: rgba(23, 35, 31, 0.72);
-  stroke-width: 1.1;
-}
-
 .trade-route-panel {
   position: absolute;
   z-index: 8;

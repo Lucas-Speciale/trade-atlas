@@ -6,7 +6,7 @@ import type { Map as MapLibreMap, MapGeoJSONFeature } from "maplibre-gl";
 
 import { displayCountryName } from "@/lib/countryNames";
 import { formatCurrency, formatMetric, formatPercent } from "@/lib/format";
-import { makeRouteCurve, routeLineWidth } from "@/lib/routes";
+import { makeRouteFan, routeLineWidth } from "@/lib/routes";
 import type {
   ExplorerMode,
   OverlayMetric,
@@ -236,18 +236,20 @@ export function TradeMap({
         return;
       }
       const origin = map.project(flow.originCenter);
-      const routes = flow.partners.map((partner) => {
+      const projectedPartners = flow.partners.map((partner) => {
         const partnerCandidates = [-360, 0, 360].map((offset) =>
           map.project([partner.center[0] + offset, partner.center[1]]),
         );
         const endpoint = partnerCandidates.reduce((nearest, candidate) =>
           Math.abs(candidate.x - origin.x) < Math.abs(nearest.x - origin.x) ? candidate : nearest,
         );
-        const start = flow.direction === "exports" ? origin : endpoint;
-        const end = flow.direction === "exports" ? endpoint : origin;
+        return { partner, endpoint };
+      });
+      const curves = makeRouteFan(origin, projectedPartners.map(({ endpoint }) => endpoint));
+      const routes = projectedPartners.map(({ partner, endpoint }, index) => {
         return {
           partner,
-          path: makeRouteCurve(start, end).path,
+          path: flow.direction === "exports" ? curves[index].path : curves[index].reversePath,
           end: endpoint,
         };
       });
@@ -434,20 +436,6 @@ export function TradeMap({
       ? Math.max(150, routeProjection.height - 405)
       : Math.min(230, Math.max(130, routeProjection.height - 510))
     : 0;
-  const routePanelIsLeftOfOrigin = routeProjection
-    ? routePanelLeft + routePanelWidth / 2 < routeProjection.origin.x
-    : false;
-  const routePanelAnchorX = routePanelIsLeftOfOrigin
-    ? routePanelLeft + routePanelWidth
-    : routePanelLeft;
-  const routeConnectorElbowX = routeProjection
-    ? routePanelIsLeftOfOrigin
-      ? Math.min(routeProjection.origin.x - 24, routePanelAnchorX + 34)
-      : Math.max(routeProjection.origin.x + 24, routePanelAnchorX - 34)
-    : 0;
-  const connectorPath = routeProjection && routeFlow
-    ? `M ${routeProjection.origin.x} ${routeProjection.origin.y} L ${routeConnectorElbowX} ${routeProjection.origin.y} L ${routePanelAnchorX} ${routePanelTop + 54}`
-    : null;
   const routeCoverage = Math.min(
     1,
     routeFlow?.partners.reduce((sum, partner) => sum + partner.share, 0) ?? 0,
@@ -512,12 +500,6 @@ export function TradeMap({
               cy={routeProjection.origin.y}
               r={4.5}
             />
-            {connectorPath && (
-              <>
-                <path className="trade-route-connector-shadow" d={connectorPath} pathLength={1} />
-                <path className="trade-route-connector" d={connectorPath} pathLength={1} />
-              </>
-            )}
           </g>
         </svg>
       )}
