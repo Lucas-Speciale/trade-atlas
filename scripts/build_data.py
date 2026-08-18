@@ -82,14 +82,6 @@ SECTIONS = (
     ("97", "97", "21", "Art & antiques"),
 )
 
-AGRICULTURE_GROUPS = (
-    ("01", "05", "animal-products", "Animal products"),
-    ("06", "14", "vegetable-products", "Vegetable products"),
-    ("15", "15", "fats-and-oils", "Animal and vegetable fats and oils"),
-    ("16", "24", "foodstuffs", "Foodstuffs"),
-)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -167,13 +159,6 @@ def section_for(hs2: str) -> tuple[str, str]:
     raise ValueError(f"No section mapping for HS2 {hs2}")
 
 
-def agriculture_group_for(hs2: str) -> dict[str, str] | None:
-    for start, end, group_id, name in AGRICULTURE_GROUPS:
-        if start <= hs2 <= end:
-            return {"id": group_id, "name": name}
-    return None
-
-
 def build_hs2_metadata() -> list[dict[str, Any]]:
     payload = json.loads(OEC_HS2_JSON.read_text(encoding="utf-8"))
     members = payload.get("members", [])
@@ -189,7 +174,6 @@ def build_hs2_metadata() -> list[dict[str, Any]]:
                 "name": member["caption"],
                 "sectionId": section_id,
                 "sectionName": section_name,
-                "agricultureGroup": agriculture_group_for(hs2),
             }
         )
     return sorted(result, key=lambda item: item["id"])

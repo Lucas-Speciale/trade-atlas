@@ -5,7 +5,7 @@
 Trade Atlas is a lightweight, browser-based way to explore how countries participate in global merchandise trade. It combines two connected experiences:
 
 1. **Country Lens** — move a flat world map beneath a fixed visual lens and watch the selected country’s export fingerprint change in place.
-2. **Product Overlay** — choose an HS4 product, HS2 chapter, or agriculture/food group and compare countries worldwide using a choropleth.
+2. **Product Overlay** — choose an HS4 product or HS2 chapter and compare countries worldwide using a choropleth.
 
 The experience is inspired by OEC’s Tradle and VisQuill’s Demographic Profiles, but the chart language, trade measures, and product workflow are original to this project.
 
@@ -101,28 +101,18 @@ The country identity, year, and current export readout live in the leader-line a
 
 Product Overlay uses the same full-viewport map. The country lens and radial basket retract so the global color pattern becomes primary.
 
-The user selects an HS4 product, HS2 chapter, or agriculture/food group and one measure:
+The user selects an HS4 product or HS2 chapter and one measure:
 
 - **Largest exporters** — country share of worldwide exports for the selection.
 - **Export dependence** — selection share of the country’s total exports.
 - **Net exporters** — exports minus imports for the selection.
 - **Specialization** — revealed comparative advantage for the selection.
 
-Product, metric, legend, and year controls float over the map. Hovering a country shows its value; selecting it pins a compact four-measure comparison and rank. Mode, year, country, product, and metric remain shareable URL parameters.
+The product-led headline reads “Compare trade in [product] worldwide.” Its product line uses the same type scale as the rest of the headline, may wrap once, and then truncates. Product and metric controls form a vertical stack directly below it, followed by the selected country’s compact four-measure comparison and ranks. The picker exposes HS2 categories and HS4 products grouped under the 21 official HS section headings, with category and product subheads inside each section. The choropleth is a translucent MapLibre fill over the same Liberty basemap used in Country Lens, so its labels, terrain, and restrained boundary weights remain visible. Net exports use a distinct red–neutral–blue diverging scale. Color domains cap at the 95th percentile to keep most countries visually distinguishable; legend endpoints use ≤/≥ labels and state when values beyond them are saturated. Legend and year controls retain their map-overlay positions. Hovering a country shows its value; selecting it updates the comparison. Mode, year, country, product, and metric remain shareable URL parameters.
 
 ## Shared country control
 
-The upper-left title always uses three lines: **See what / [Country] / trades.** The country name changes with lens movement, and the name itself is a searchable autocomplete field. When the lens is over ocean it clears to the search placeholder. This is the only explicit country selector; there is no duplicate control in the upper-right mode switch.
-
-## Agriculture and food groupings
-
-- Animal Products — HS 01–05
-- Vegetable Products — HS 06–14
-- Animal and Vegetable Fats and Oils — HS 15
-- Foodstuffs — HS 16–24
-- Agriculture & Food — HS 01–24
-
-These filters describe trade, not domestic production.
+Country Lens uses the three-line title **See what / [Country] / trades.** The country name changes with lens movement, and the name itself is a searchable autocomplete field. When the lens is over ocean it clears to the search placeholder. Product Overlay replaces that copy with **Compare trade in / [Product] / worldwide.** There is no duplicate country selector in the upper-right mode switch.
 
 ## Map sources and behavior
 
@@ -244,10 +234,10 @@ Exit condition: changing year updates the selected country and lens without disr
 ### Phase 4 — Integrated Product Overlay
 
 - Retract the lens cleanly in overlay mode.
-- Move product, metric, legend, selected-country values, and year controls into compact map overlays.
+- Stack product controls and selected-country values beneath the headline; keep legend and year controls as compact map overlays.
 - Keep choropleth colors, country hover, country selection, and ranks synchronized.
 
-Exit condition: users can move from a radial HS4 bar to its global comparison without leaving the visualization surface.
+Exit condition: users can move from a radial HS4 readout to its global comparison without leaving the visualization surface.
 
 ### Phase 5 — Cleanup and validation
 

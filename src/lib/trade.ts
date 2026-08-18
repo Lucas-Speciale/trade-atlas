@@ -8,38 +8,10 @@ import type {
   ProductSelection,
 } from "@/types/trade";
 
-export const AGRICULTURE_SELECTIONS: ProductSelection[] = [
-  {
-    id: "group:animal-products",
-    label: "Animal products",
-    hs2Ids: ["01", "02", "03", "04", "05"],
-    kind: "group",
-  },
-  {
-    id: "group:vegetable-products",
-    label: "Vegetable products",
-    hs2Ids: ["06", "07", "08", "09", "10", "11", "12", "13", "14"],
-    kind: "group",
-  },
-  {
-    id: "group:fats-and-oils",
-    label: "Animal & vegetable fats and oils",
-    hs2Ids: ["15"],
-    kind: "group",
-  },
-  {
-    id: "group:foodstuffs",
-    label: "Foodstuffs",
-    hs2Ids: ["16", "17", "18", "19", "20", "21", "22", "23", "24"],
-    kind: "group",
-  },
-];
-
 export const makeProductSelections = (
   products: Hs2Meta[],
   hs4Products: Hs4Meta[] = [],
 ): ProductSelection[] => [
-  ...AGRICULTURE_SELECTIONS,
   ...products.map((product) => ({
     id: `hs2:${product.id}`,
     label: `${product.id} · ${product.name}`,

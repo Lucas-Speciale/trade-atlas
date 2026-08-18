@@ -65,8 +65,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 
 .brand-panel,
 .view-dock,
-.overlay-dock,
-.overlay-profile,
 .map-legend,
 .year-carousel {
   position: absolute;
@@ -101,6 +99,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
   line-height: 0.94;
 }
 
+.overlay-headline-product {
+  display: -webkit-box;
+  width: min(470px, calc(100vw - 52px));
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--accent-dark);
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
 .headline-country-search {
   position: relative;
   display: inline-flex;
@@ -130,7 +140,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 
 .headline-country-search input::-webkit-search-cancel-button { display: none; }
 
-.brand-panel p:last-child {
+.brand-copy > p:last-child {
   margin: 9px 0 0;
   color: #495752;
   font-size: 0.8rem;
@@ -604,10 +614,19 @@ dd {
   text-align: center;
 }
 
+.overlay-stack {
+  display: grid;
+  width: min(326px, calc(100vw - 52px));
+  gap: 10px;
+  margin-top: 14px;
+  pointer-events: auto;
+  text-shadow: none;
+}
+
 .overlay-dock {
-  top: 128px;
-  left: 24px;
-  width: 326px;
+  position: relative;
+  z-index: 6;
+  width: 100%;
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 15px;
@@ -639,9 +658,9 @@ dd {
 }
 
 .overlay-profile {
-  right: 22px;
-  bottom: 118px;
-  width: min(590px, calc(100vw - 44px));
+  position: relative;
+  z-index: 6;
+  width: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 15px;
@@ -650,17 +669,26 @@ dd {
   backdrop-filter: blur(12px);
 }
 .overlay-profile-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
+  display: grid;
+  gap: 3px;
   padding: 10px 13px;
   border-bottom: 1px solid rgba(23, 35, 31, 0.14);
   font-size: 0.7rem;
 }
 .overlay-profile-heading span { color: var(--muted); }
-.overlay-profile dl { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; }
-.overlay-profile dl div { padding: 10px 12px; border-left: 1px solid rgba(23, 35, 31, 0.13); }
-.overlay-profile dl div:first-child { border-left: 0; }
+.overlay-profile-heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overlay-profile dl { display: grid; grid-template-columns: repeat(2, 1fr); margin: 0; }
+.overlay-profile dl div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-left: 1px solid rgba(23, 35, 31, 0.13);
+}
+.overlay-profile dl div:nth-child(odd) { border-left: 0; }
+.overlay-profile dl div:nth-child(n + 3) { border-top: 1px solid rgba(23, 35, 31, 0.13); }
 .overlay-profile dd { font-size: 1rem; }
 .overlay-profile small { color: var(--muted); font-size: 0.58rem; }
 
@@ -676,9 +704,16 @@ dd {
   backdrop-filter: blur(10px);
 }
 .map-legend > span { color: var(--muted); font-size: 0.62rem; font-weight: 700; }
+.map-legend > small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.5rem;
+  line-height: 1.25;
+}
 .legend-ramp { height: 8px; margin-top: 6px; border-radius: 999px; }
 .legend-ramp.sequential { background: linear-gradient(90deg, #ffffd9, #41b6c4, #081d58); }
-.legend-ramp.diverging { background: linear-gradient(90deg, #8c510a, #f5f5f5, #01665e); }
+.legend-ramp.diverging { background: linear-gradient(90deg, #b2182b, #f7f7f7, #2166ac); }
 .legend-labels { display: flex; justify-content: space-between; margin-top: 3px; color: var(--muted); font-size: 0.52rem; }
 
 .map-tooltip {
@@ -745,7 +780,6 @@ dd {
   .brand-panel h2 { font-size: 2.5rem; }
   .country-facts { right: 16px; left: 16px; grid-template-columns: repeat(3, 1fr); }
   .country-facts .secondary-fact { display: none; }
-  .overlay-profile { width: min(520px, calc(100vw - 44px)); }
   .map-legend { top: 148px; }
 }
 
@@ -754,7 +788,7 @@ dd {
   .map-stage { min-height: 560px; }
   .brand-panel { top: 14px; left: 14px; max-width: 170px; }
   .brand-panel h2 { font-size: 1.8rem; }
-  .brand-panel p:last-child { display: none; }
+  .brand-copy > p:last-child { display: none; }
   .view-dock { top: 10px; right: 10px; display: grid; gap: 6px; padding: 6px; }
   .mode-switch button { min-height: 30px; padding-inline: 8px; font-size: 0.66rem; }
   .trade-readout-percent { stroke-width: 4px; font-size: 16px; }
@@ -797,19 +831,15 @@ dd {
   .data-note { display: none; }
   .maplibregl-ctrl-bottom-right { right: 5px; bottom: 92px; }
   .maplibregl-ctrl-group { display: none; }
-  .overlay-dock {
-    top: 120px;
-    left: 10px;
-    width: min(285px, calc(100vw - 20px));
-    padding: 9px;
-  }
+  .mode-overlay .brand-panel { max-width: min(285px, calc(100vw - 28px)); }
+  .overlay-headline-product { width: min(285px, calc(100vw - 28px)); }
+  .overlay-stack { width: min(285px, calc(100vw - 28px)); margin-top: 9px; gap: 7px; }
+  .overlay-dock { padding: 9px; }
   .metric-switch { grid-template-columns: 1fr 1fr; }
   .metric-switch button { display: block; padding: 7px; }
   .metric-switch button span { display: none; }
   .map-legend { top: auto; right: 10px; bottom: 266px; width: 190px; }
-  .overlay-profile { right: 10px; bottom: 103px; width: calc(100vw - 20px); }
   .overlay-profile-heading { font-size: 0.62rem; }
-  .overlay-profile-heading strong { max-width: 48%; text-align: right; }
   .overlay-profile dl div { padding: 8px 6px; }
   .overlay-profile dt { font-size: 0.45rem; }
   .overlay-profile dd { font-size: 0.72rem; }

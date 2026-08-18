@@ -35,17 +35,11 @@ export interface CountryMeta {
   hasGeometry: boolean;
 }
 
-export interface AgricultureGroup {
-  id: string;
-  name: string;
-}
-
 export interface Hs2Meta {
   id: string;
   name: string;
   sectionId: string;
   sectionName: string;
-  agricultureGroup: AgricultureGroup | null;
 }
 
 export interface Hs4Meta {
@@ -124,7 +118,7 @@ export interface ProductSelection {
   label: string;
   hs2Ids: string[];
   hs4Id?: string;
-  kind: "hs2" | "hs4" | "group";
+  kind: "hs2" | "hs4";
 }
 
 export interface OverlayDatum {

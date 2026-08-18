@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { interpolateBrBG, interpolateYlGnBu } from "d3-scale-chromatic";
+import { interpolateRdBu, interpolateYlGnBu } from "d3-scale-chromatic";
 import { scaleDivergingSymlog, scaleSequentialSqrt } from "d3-scale";
 
 import { TradeLens } from "@/components/TradeLens";
@@ -10,7 +10,6 @@ import { YearCarousel } from "@/components/YearCarousel";
 import { displayCountryName } from "@/lib/countryNames";
 import { formatCurrency, formatMetric, formatPercent, formatRca } from "@/lib/format";
 import {
-  AGRICULTURE_SELECTIONS,
   computeHs4Overlay,
   computeOverlay,
   makeProductSelections,
@@ -26,6 +25,7 @@ import type {
   Manifest,
   OverlayDatum,
   OverlayMetric,
+  ProductSelection,
   TradeGeometry,
   YearData,
 } from "@/types/trade";
@@ -67,7 +67,7 @@ function getInitialState(): InitialState {
       mode: "country",
       year: 2023,
       country: "USA",
-      product: "group:vegetable-products",
+      product: "hs2:01",
       metric: "worldExportShare",
     };
   }
@@ -78,7 +78,7 @@ function getInitialState(): InitialState {
     mode: params.get("mode") === "overlay" ? "overlay" : "country",
     year: Number(params.get("year")) || 2023,
     country: params.get("country")?.toUpperCase() || "USA",
-    product: params.get("product") || "group:vegetable-products",
+    product: params.get("product") || "hs2:01",
     metric: metric && metricIds.has(metric) ? metric : "worldExportShare",
   };
 }
@@ -179,10 +179,37 @@ export function TradeExplorer() {
     () => (base ? makeProductSelections(base.products, base.hs4Products) : []),
     [base],
   );
+  const productGroups = useMemo(() => {
+    if (!base) return [];
+    const selectionsById = new Map(productSelections.map((item) => [item.id, item]));
+    const groups = new Map<string, {
+      id: string;
+      name: string;
+      hs2: ProductSelection[];
+      hs4: ProductSelection[];
+    }>();
+    const getGroup = (id: string, name: string) => {
+      const existing = groups.get(id);
+      if (existing) return existing;
+      const group = { id, name, hs2: [], hs4: [] };
+      groups.set(id, group);
+      return group;
+    };
+
+    base.products.forEach((product) => {
+      const selection = selectionsById.get(`hs2:${product.id}`);
+      if (selection) getGroup(product.sectionId, product.sectionName).hs2.push(selection);
+    });
+    base.hs4Products.forEach((product) => {
+      const selection = selectionsById.get(`hs4:${product.id}`);
+      if (selection) getGroup(product.sectionId, product.sectionName).hs4.push(selection);
+    });
+
+    return [...groups.values()].sort((a, b) => a.id.localeCompare(b.id));
+  }, [base, productSelections]);
   const selectedProduct = useMemo(
     () =>
       productSelections.find((item) => item.id === selectionId) ??
-      productSelections.find((item) => item.id === "group:vegetable-products") ??
       productSelections[0],
     [productSelections, selectionId],
   );
@@ -297,7 +324,7 @@ export function TradeExplorer() {
     const colors = new Map<string, { color: string; value: number }>();
     if (metric === "net") {
       const cap = percentile(values.map(Math.abs), 0.95) || 1;
-      const scale = scaleDivergingSymlog<string>(interpolateBrBG).domain([-cap, 0, cap]).clamp(true);
+      const scale = scaleDivergingSymlog<string>(interpolateRdBu).domain([-cap, 0, cap]).clamp(true);
       overlayData.forEach((item) => colors.set(item.iso3, { color: scale(item.net), value: item.net }));
     } else {
       const positive = values.filter((value) => value > 0);
@@ -386,10 +413,15 @@ export function TradeExplorer() {
   }
 
   const activeMetricInfo = METRICS.find((item) => item.id === metric)!;
+  const overlayProductName = selectedProduct.label.replace(/^\d{2,4}\s·\s/, "");
   const legendValues = [...overlayValues.values()].map((item) => item.value);
   const legendCap = metric === "net"
     ? percentile(legendValues.map(Math.abs), 0.95)
     : percentile(legendValues.filter((value) => value > 0), 0.95);
+  const legendMaximum = metric === "net"
+    ? Math.max(0, ...legendValues.map(Math.abs))
+    : Math.max(0, ...legendValues);
+  const legendIsCapped = legendCap > 0 && legendCap < legendMaximum;
 
   return (
     <main className={`trade-app mode-${mode}`}>
@@ -407,48 +439,103 @@ export function TradeExplorer() {
           }}
         />
 
-        <header className="brand-panel">
-          <p className="eyebrow">Trade Atlas</p>
-          <h2 className="trade-headline">
-            <span>See what</span>
-            <label className="headline-country-search">
-              <input
-                aria-label="Search for a country"
-                type="search"
-                list="country-name-suggestions"
-                value={displayedCountryQuery}
-                placeholder="a country"
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(event) => {
-                  const nextQuery = event.target.value;
-                  setCountryQuery(nextQuery);
-                  const exactMatch = findCountry(nextQuery);
-                  if (exactMatch) selectCountry(exactMatch.iso3, true);
-                }}
-                onBlur={commitCountryQuery}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    commitCountryQuery();
-                    event.currentTarget.blur();
-                  }
-                  if (event.key === "Escape") {
-                    setCountryQuery(null);
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-              <datalist id="country-name-suggestions">
-                {selectableCountries.map((country) => (
-                  <option key={country.iso3} value={displayCountryName(country.iso3, country.name)} />
-                ))}
-              </datalist>
-            </label>
-            <span>trades.</span>
-          </h2>
-          <p>{mode === "country" ? "Drag the map beneath the lens." : "Compare one product across every country."}</p>
-        </header>
+        <div className="brand-panel">
+          <header className="brand-copy">
+            <p className="eyebrow">Trade Atlas</p>
+            <h2 className={`trade-headline${mode === "overlay" ? " overlay-headline" : ""}`}>
+              {mode === "country" ? (
+                <>
+                  <span>See what</span>
+                  <label className="headline-country-search">
+                    <input
+                      aria-label="Search for a country"
+                      type="search"
+                      list="country-name-suggestions"
+                      value={displayedCountryQuery}
+                      placeholder="a country"
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(event) => {
+                        const nextQuery = event.target.value;
+                        setCountryQuery(nextQuery);
+                        const exactMatch = findCountry(nextQuery);
+                        if (exactMatch) selectCountry(exactMatch.iso3, true);
+                      }}
+                      onBlur={commitCountryQuery}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitCountryQuery();
+                          event.currentTarget.blur();
+                        }
+                        if (event.key === "Escape") {
+                          setCountryQuery(null);
+                          event.currentTarget.blur();
+                        }
+                      }}
+                    />
+                    <datalist id="country-name-suggestions">
+                      {selectableCountries.map((country) => (
+                        <option key={country.iso3} value={displayCountryName(country.iso3, country.name)} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <span>trades.</span>
+                </>
+              ) : (
+                <>
+                  <span>Compare trade in</span>
+                  <span className="overlay-headline-product" title={overlayProductName}>{overlayProductName}</span>
+                  <span>worldwide.</span>
+                </>
+              )}
+            </h2>
+            <p>{mode === "country" ? "Drag the map beneath the lens." : "Compare one product’s trade across every country."}</p>
+          </header>
+
+          {mode === "overlay" && (
+            <div className="overlay-stack">
+              <section className="overlay-dock" aria-label="Product overlay controls">
+                <label className="product-picker">
+                  <span>Category or product</span>
+                  <select value={selectedProduct.id} onChange={(event) => setSelectionId(event.target.value)}>
+                    {productGroups.map((group) => (
+                      <optgroup key={group.id} label={`${group.id} · ${group.name}`}>
+                        <option disabled value={`heading:${group.id}:hs2`}>— HS2 categories —</option>
+                        {group.hs2.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                        <option disabled value={`heading:${group.id}:hs4`}>— HS4 products —</option>
+                        {group.hs4.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+                <div className="metric-switch" aria-label="Overlay measure">
+                  {METRICS.map((item) => (
+                    <button key={item.id} type="button" className={metric === item.id ? "active" : ""} onClick={() => setMetric(item.id)}>
+                      <strong>{item.label}</strong>
+                      <span>{item.help}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {activeCountry && activeMeta && activeOverlay && (
+                <aside className="overlay-profile" aria-live="polite">
+                  <div className="overlay-profile-heading">
+                    <span>{activeCountryName} · {year}</span>
+                    <strong>{selectedProduct.label}</strong>
+                  </div>
+                  <dl>
+                    <div><dt>World share</dt><dd>{formatPercent(activeOverlay.worldExportShare)}</dd><small>#{activeOverlay.ranks.worldExportShare}</small></div>
+                    <div><dt>Export dependence</dt><dd>{formatPercent(activeOverlay.exportShare)}</dd><small>#{activeOverlay.ranks.exportShare}</small></div>
+                    <div><dt>Net exports</dt><dd className={activeOverlay.net >= 0 ? "positive" : "negative"}>{formatCurrency(activeOverlay.net)}</dd><small>#{activeOverlay.ranks.net}</small></div>
+                    <div><dt>Specialization</dt><dd>{formatRca(activeOverlay.rca)}</dd><small>#{activeOverlay.ranks.rca}</small></div>
+                  </dl>
+                </aside>
+              )}
+            </div>
+          )}
+        </div>
 
         <nav className="view-dock" aria-label="Explorer controls">
           <div className="mode-switch" aria-label="View mode">
@@ -474,58 +561,13 @@ export function TradeExplorer() {
         )}
 
         {mode === "overlay" && (
-          <section className="overlay-dock" aria-label="Product overlay controls">
-            <label className="product-picker">
-              <span>Product or group</span>
-              <select value={selectedProduct.id} onChange={(event) => setSelectionId(event.target.value)}>
-                <optgroup label="Agriculture & food groups">
-                  {AGRICULTURE_SELECTIONS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                </optgroup>
-                <optgroup label="HS2 chapters">
-                  {productSelections
-                    .filter((item) => item.kind === "hs2")
-                    .map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                </optgroup>
-                <optgroup label="HS4 products">
-                  {productSelections
-                    .filter((item) => item.kind === "hs4")
-                    .map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                </optgroup>
-              </select>
-            </label>
-            <div className="metric-switch" aria-label="Overlay measure">
-              {METRICS.map((item) => (
-                <button key={item.id} type="button" className={metric === item.id ? "active" : ""} onClick={() => setMetric(item.id)}>
-                  <strong>{item.label}</strong>
-                  <span>{item.help}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {mode === "overlay" && activeCountry && activeMeta && activeOverlay && (
-          <aside className="overlay-profile" aria-live="polite">
-            <div className="overlay-profile-heading">
-              <span>{activeCountryName} · {year}</span>
-              <strong>{selectedProduct.label}</strong>
-            </div>
-            <dl>
-              <div><dt>World share</dt><dd>{formatPercent(activeOverlay.worldExportShare)}</dd><small>#{activeOverlay.ranks.worldExportShare}</small></div>
-              <div><dt>Export dependence</dt><dd>{formatPercent(activeOverlay.exportShare)}</dd><small>#{activeOverlay.ranks.exportShare}</small></div>
-              <div><dt>Net exports</dt><dd className={activeOverlay.net >= 0 ? "positive" : "negative"}>{formatCurrency(activeOverlay.net)}</dd><small>#{activeOverlay.ranks.net}</small></div>
-              <div><dt>Specialization</dt><dd>{formatRca(activeOverlay.rca)}</dd><small>#{activeOverlay.ranks.rca}</small></div>
-            </dl>
-          </aside>
-        )}
-
-        {mode === "overlay" && (
           <div className="map-legend" aria-label={`${activeMetricInfo.label} color scale`}>
             <span>{activeMetricInfo.help}</span>
+            {legendIsCapped && <small>Color saturates beyond the shown endpoints.</small>}
             <div className={metric === "net" ? "legend-ramp diverging" : "legend-ramp sequential"} />
             <div className="legend-labels">
-              <span>{metric === "net" ? formatMetric(metric, -legendCap) : "0"}</span>
-              <span>{formatMetric(metric, legendCap)}</span>
+              <span>{metric === "net" && legendIsCapped ? `≤ ${formatMetric(metric, -legendCap)}` : metric === "net" ? formatMetric(metric, -legendCap) : "0"}</span>
+              <span>{legendIsCapped ? `≥ ${formatMetric(metric, legendCap)}` : formatMetric(metric, legendCap)}</span>
             </div>
           </div>
         )}

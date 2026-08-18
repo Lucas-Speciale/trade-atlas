@@ -253,7 +253,7 @@ export function TradeMap({
         type: "fill",
         paint: {
           "fill-color": fillExpression(modeRef.current, overlayValuesRef.current) as never,
-          "fill-opacity": 1,
+          "fill-opacity": modeRef.current === "overlay" ? 0.44 : 1,
         },
       }, boundaryLayer);
       map.addLayer({
@@ -261,21 +261,25 @@ export function TradeMap({
         source: SOURCE_ID,
         type: "fill",
         filter: ["==", ["get", "tradeIso3"], activeIso3Ref.current],
-        paint: { "fill-color": "#dd6f47", "fill-opacity": 0.36 },
+        paint: { "fill-color": "#dd6f47", "fill-opacity": modeRef.current === "country" ? 0.36 : 0 },
       }, boundaryLayer);
       map.addLayer({
         id: ACTIVE_LINE_LAYER,
         source: SOURCE_ID,
         type: "line",
         filter: ["==", ["get", "tradeIso3"], activeIso3Ref.current],
-        paint: { "line-color": "#273530", "line-width": 1.35, "line-opacity": 0.82 },
+        paint: {
+          "line-color": "#273530",
+          "line-width": modeRef.current === "country" ? 1.35 : 0.9,
+          "line-opacity": modeRef.current === "country" ? 0.82 : 0.58,
+        },
       });
       map.addLayer({
         id: HOVER_LINE_LAYER,
         source: SOURCE_ID,
         type: "line",
         filter: ["==", ["get", "tradeIso3"], ""],
-        paint: { "line-color": "#273530", "line-width": 1.65, "line-opacity": 0.84 },
+        paint: { "line-color": "#273530", "line-width": 0.9, "line-opacity": 0.68 },
       });
       readyRef.current = true;
       map.on("move", requestLensSelection);
@@ -310,6 +314,10 @@ export function TradeMap({
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
     map.setPaintProperty(FILL_LAYER, "fill-color", fillExpression(mode, overlayValues) as never);
+    map.setPaintProperty(FILL_LAYER, "fill-opacity", mode === "overlay" ? 0.44 : 1);
+    map.setPaintProperty(ACTIVE_FILL_LAYER, "fill-opacity", mode === "country" ? 0.36 : 0);
+    map.setPaintProperty(ACTIVE_LINE_LAYER, "line-width", mode === "country" ? 1.35 : 0.9);
+    map.setPaintProperty(ACTIVE_LINE_LAYER, "line-opacity", mode === "country" ? 0.82 : 0.58);
   }, [mode, overlayValues]);
 
   useEffect(() => {
