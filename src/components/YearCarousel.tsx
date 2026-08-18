@@ -14,7 +14,11 @@ const SLOT_WIDTH = 72;
 
 export function YearCarousel({ years, value, provisionalYears, loading, onChange }: YearCarouselProps) {
   const activeIndex = Math.max(0, years.indexOf(value));
-  const dragRef = useRef<{ pointerId: number; startX: number } | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    targetYear: number | null;
+  } | null>(null);
   const wheelRef = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -25,20 +29,34 @@ export function YearCarousel({ years, value, provisionalYears, loading, onChange
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>("button[data-year]")
+      : null;
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX };
-    setIsDragging(true);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      targetYear: target ? Number(target.dataset.year) : null,
+    };
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
-    setDragOffset(event.clientX - dragRef.current.startX);
+    const nextOffset = event.clientX - dragRef.current.startX;
+    if (Math.abs(nextOffset) >= 4) setIsDragging(true);
+    setDragOffset(nextOffset);
   };
 
   const finishDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
-    const steps = Math.round(-dragOffset / SLOT_WIDTH);
-    selectIndex(activeIndex + steps);
+    const { startX, targetYear } = dragRef.current;
+    const finalOffset = event.clientX - startX;
+    if (Math.abs(finalOffset) < 4 && targetYear !== null) {
+      onChange(targetYear);
+    } else {
+      const steps = Math.round(-finalOffset / SLOT_WIDTH);
+      selectIndex(activeIndex + steps);
+    }
     setDragOffset(0);
     setIsDragging(false);
     dragRef.current = null;
@@ -91,6 +109,7 @@ export function YearCarousel({ years, value, provisionalYears, loading, onChange
               <button
                 key={year}
                 type="button"
+                data-year={year}
                 className={year === value ? "active" : ""}
                 style={{ opacity: Math.max(0.2, 1 - distance * 0.23) }}
                 aria-pressed={year === value}
@@ -106,7 +125,7 @@ export function YearCarousel({ years, value, provisionalYears, loading, onChange
           })}
         </div>
       </div>
-      <span className="year-carousel-hint">Drag, scroll, or use arrow keys</span>
+      <span className="year-carousel-hint">Drag, click, scroll, or use arrow keys</span>
     </div>
   );
 }
