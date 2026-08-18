@@ -37,6 +37,9 @@ SOURCE_VERSION = "BACI_HS17_V202601"
 WORLD_BANK_VERSION = "2026-07-14 catalog release"
 WORLD_BANK_MEMBER = "WB_Boundaries_GeoJSON_lowres/WB_countries_Admin0_lowres.geojson"
 TOP_HS4_PER_COUNTRY = 24
+TOP_ROUTE_PARTNERS = 10
+TOP_ROUTE_CANDIDATES = 20
+MIN_ROUTE_TOTAL_USD = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -314,6 +317,123 @@ def fetch_dicts(connection: duckdb.DuckDBPyConnection, query: str) -> Iterable[d
         yield dict(zip(columns, row))
 
 
+def build_route_level(
+    connection: duckdb.DuckDBPyConnection,
+    level: str,
+    countries: dict[int, Country],
+    geometry_codes: set[str],
+) -> dict[str, list[list[Any]]]:
+    if level not in {"hs2", "hs4"}:
+        raise ValueError(f"Unsupported route level: {level}")
+    flow_table = f"{level}_bilateral_flows"
+    totals_table = "country_product_base" if level == "hs2" else "hs4_country_product_base"
+    product_column = level
+    query = f"""
+        WITH outbound AS (
+            SELECT
+                {product_column} AS product,
+                exporter_id AS country_id,
+                importer_id AS partner_id,
+                trade_value,
+                row_number() OVER (
+                    PARTITION BY {product_column}, exporter_id
+                    ORDER BY trade_value DESC, importer_id
+                ) AS route_rank
+            FROM {flow_table}
+        ),
+        inbound AS (
+            SELECT
+                {product_column} AS product,
+                importer_id AS country_id,
+                exporter_id AS partner_id,
+                trade_value,
+                row_number() OVER (
+                    PARTITION BY {product_column}, importer_id
+                    ORDER BY trade_value DESC, exporter_id
+                ) AS route_rank
+            FROM {flow_table}
+        )
+        SELECT
+            routes.product,
+            routes.country_id,
+            1 AS direction,
+            routes.partner_id,
+            routes.trade_value,
+            totals.exports AS total_value,
+            routes.route_rank
+        FROM outbound routes
+        JOIN {totals_table} totals
+          ON totals.country_id = routes.country_id
+         AND totals.{product_column} = routes.product
+        WHERE totals.exports >= totals.imports
+          AND totals.exports >= {MIN_ROUTE_TOTAL_USD}
+          AND routes.route_rank <= {TOP_ROUTE_CANDIDATES}
+        UNION ALL
+        SELECT
+            routes.product,
+            routes.country_id,
+            -1 AS direction,
+            routes.partner_id,
+            routes.trade_value,
+            totals.imports AS total_value,
+            routes.route_rank
+        FROM inbound routes
+        JOIN {totals_table} totals
+          ON totals.country_id = routes.country_id
+         AND totals.{product_column} = routes.product
+        WHERE totals.imports > totals.exports
+          AND totals.imports >= {MIN_ROUTE_TOTAL_USD}
+          AND routes.route_rank <= {TOP_ROUTE_CANDIDATES}
+        ORDER BY product, country_id, direction DESC, route_rank
+    """
+
+    grouped: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for row in fetch_dicts(connection, query):
+        country = countries.get(row["country_id"])
+        partner = countries.get(row["partner_id"])
+        if (
+            country is None
+            or partner is None
+            or country.ui_iso3 not in geometry_codes
+            or partner.ui_iso3 not in geometry_codes
+            or country.ui_iso3 == partner.ui_iso3
+        ):
+            continue
+        key = (row["product"], country.ui_iso3, row["direction"])
+        group = grouped.setdefault(key, {"partners": [], "seen": set()})
+        if partner.ui_iso3 in group["seen"] or len(group["partners"]) >= TOP_ROUTE_PARTNERS:
+            continue
+        share_basis_points = max(
+            1,
+            min(10_000, round(row["trade_value"] / row["total_value"] * 10_000)),
+        )
+        group["seen"].add(partner.ui_iso3)
+        group["partners"].append([partner.ui_iso3, share_basis_points])
+
+    routes_by_product: dict[str, list[list[Any]]] = defaultdict(list)
+    for (product, country_iso3, direction), group in sorted(grouped.items()):
+        if group["partners"]:
+            routes_by_product[product].append(
+                [country_iso3, direction, group["partners"]]
+            )
+    return dict(routes_by_product)
+
+
+def build_route_partitions(
+    connection: duckdb.DuckDBPyConnection,
+    countries: dict[int, Country],
+    geometry_codes: set[str],
+) -> dict[str, dict[str, Any]]:
+    hs2_routes = build_route_level(connection, "hs2", countries, geometry_codes)
+    hs4_routes = build_route_level(connection, "hs4", countries, geometry_codes)
+    partitions: dict[str, dict[str, Any]] = {}
+    for hs2, routes in hs2_routes.items():
+        partitions.setdefault(hs2, {"hs2Routes": [], "hs4Routes": {}})["hs2Routes"] = routes
+    for hs4, routes in hs4_routes.items():
+        partitions.setdefault(hs4[:2], {"hs2Routes": [], "hs4Routes": {}})["hs4Routes"][hs4] = routes
+    return partitions
+
+
 def build_year(
     connection: duckdb.DuckDBPyConnection,
     archive: zipfile.ZipFile,
@@ -324,7 +444,13 @@ def build_year(
     valid_hs4: set[str],
     sql_template: str,
     temporary_dir: Path,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, dict[str, list[list[Any]]]], dict[str, Any]]:
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, dict[str, list[list[Any]]]],
+    dict[str, dict[str, Any]],
+    dict[str, Any],
+]:
     member = f"BACI_HS17_Y{year}_V202601.csv"
     if member not in archive.namelist():
         raise FileNotFoundError(f"{member} is missing from {BACI_ZIP.name}")
@@ -418,6 +544,8 @@ def build_year(
     if unknown_hs4:
         raise ValueError(f"Unknown HS4 codes in {year}: {sorted(unknown_hs4)}")
 
+    route_partitions = build_route_partitions(connection, countries, geometry_codes)
+
     output_countries = []
     hs4_lens_countries = []
     unknown_numeric_ids = []
@@ -488,6 +616,20 @@ def build_year(
             for products in hs4_partitions.values()
             for country_rows in products.values()
         ),
+        "routeCountries": sum(
+            len(partition["hs2Routes"])
+            + sum(len(routes) for routes in partition["hs4Routes"].values())
+            for partition in route_partitions.values()
+        ),
+        "routePartners": sum(
+            sum(len(country[2]) for country in partition["hs2Routes"])
+            + sum(
+                len(country[2])
+                for routes in partition["hs4Routes"].values()
+                for country in routes
+            )
+            for partition in route_partitions.values()
+        ),
         "unknownNumericCountryIds": unknown_numeric_ids,
         "worldExports": world_exports,
         "worldImports": world_imports,
@@ -529,6 +671,7 @@ def build_year(
             "countries": hs4_lens_countries,
         },
         {hs2: dict(products) for hs2, products in hs4_partitions.items()},
+        route_partitions,
         validation,
     )
 
@@ -593,7 +736,7 @@ def main() -> None:
         output_sizes = {}
         with tempfile.TemporaryDirectory(prefix="map-proj-baci-") as temporary:
             for year in years:
-                year_payload, hs4_lens_payload, hs4_partitions, validation = build_year(
+                year_payload, hs4_lens_payload, hs4_partitions, route_partitions, validation = build_year(
                     connection,
                     archive,
                     year,
@@ -621,22 +764,42 @@ def main() -> None:
                             "products": products,
                         },
                     )
+                route_dir = OUTPUT_DIR / "routes" / str(year)
+                if route_dir.exists():
+                    shutil.rmtree(route_dir)
+                for hs2_id, partition in sorted(route_partitions.items()):
+                    write_json(
+                        route_dir / f"{hs2_id}.json",
+                        {
+                            "schemaVersion": 1,
+                            "year": year,
+                            "hs2": hs2_id,
+                            "minimumTradeValue": MIN_ROUTE_TOTAL_USD,
+                            "hs2Routes": partition["hs2Routes"],
+                            "hs4Routes": partition["hs4Routes"],
+                        },
+                    )
                 validation["outputBytes"] = output_path.stat().st_size
                 validation["hs4LensOutputBytes"] = lens_path.stat().st_size
                 validation["hs4PartitionOutputBytes"] = sum(
                     path.stat().st_size for path in partition_dir.glob("*.json")
+                )
+                validation["routeOutputBytes"] = sum(
+                    path.stat().st_size for path in route_dir.glob("*.json")
                 )
                 validations.append(validation)
                 output_sizes[str(year)] = {
                     "hs2": output_path.stat().st_size,
                     "hs4Lens": lens_path.stat().st_size,
                     "hs4Partitions": validation["hs4PartitionOutputBytes"],
+                    "routes": validation["routeOutputBytes"],
                 }
                 print(
                     f"[{year}] {validation['countries']} countries, "
                     f"{validation['countryProductRows']} HS2 rows, "
                     f"{validation['hs4FlowRows']} HS4 rows, "
-                    f"{(output_path.stat().st_size + lens_path.stat().st_size + validation['hs4PartitionOutputBytes']) / 1_000_000:.2f} MB",
+                    f"{validation['routePartners']} route partners, "
+                    f"{(output_path.stat().st_size + lens_path.stat().st_size + validation['hs4PartitionOutputBytes'] + validation['routeOutputBytes']) / 1_000_000:.2f} MB",
                     flush=True,
                 )
         connection.close()
@@ -677,6 +840,7 @@ def main() -> None:
             "yearPattern": "years/{year}.json",
             "hs4LensYearPattern": "hs4/lens/{year}.json",
             "hs4PartitionPattern": "hs4/years/{year}/{hs2}.json",
+            "routePartitionPattern": "routes/{year}/{hs2}.json",
         },
     }
     write_json(OUTPUT_DIR / "manifest.json", manifest, pretty=True)

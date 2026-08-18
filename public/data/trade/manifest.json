@@ -35,6 +35,7 @@
     "geometry": "geometry.geojson",
     "yearPattern": "years/{year}.json",
     "hs4LensYearPattern": "hs4/lens/{year}.json",
-    "hs4PartitionPattern": "hs4/years/{year}/{hs2}.json"
+    "hs4PartitionPattern": "hs4/years/{year}/{hs2}.json",
+    "routePartitionPattern": "routes/{year}/{hs2}.json"
   }
 }

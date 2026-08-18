@@ -26,6 +26,15 @@ SELECT
 FROM raw_flows
 GROUP BY exporter_id, hs2;
 
+CREATE OR REPLACE TEMP TABLE hs2_bilateral_flows AS
+SELECT
+    exporter_id,
+    importer_id,
+    hs2,
+    CAST(round(sum(value_thousand_usd) * 1000) AS BIGINT) AS trade_value
+FROM raw_flows
+GROUP BY exporter_id, importer_id, hs2;
+
 CREATE OR REPLACE TEMP TABLE hs2_imports AS
 SELECT
     importer_id AS country_id,
@@ -59,6 +68,15 @@ SELECT
     CAST(round(sum(value_thousand_usd) * 1000) AS BIGINT) AS exports
 FROM raw_flows
 GROUP BY exporter_id, hs4;
+
+CREATE OR REPLACE TEMP TABLE hs4_bilateral_flows AS
+SELECT
+    exporter_id,
+    importer_id,
+    hs4,
+    CAST(round(sum(value_thousand_usd) * 1000) AS BIGINT) AS trade_value
+FROM raw_flows
+GROUP BY exporter_id, importer_id, hs4;
 
 CREATE OR REPLACE TEMP TABLE hs4_imports AS
 SELECT

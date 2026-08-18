@@ -108,7 +108,7 @@ The user selects an HS4 product or HS2 chapter and one measure:
 - **Net exporters** — exports minus imports for the selection.
 - **Specialization** — revealed comparative advantage for the selection.
 
-The product-led headline reads “Compare trade in [product] worldwide.” Its product line uses the same type scale as the rest of the headline, may wrap once, and then truncates. Product and metric controls form a vertical stack directly below it, followed by the selected country’s compact four-measure comparison and ranks. The picker exposes HS2 categories and HS4 products grouped under the 21 official HS section headings, with category and product subheads inside each section. The choropleth is a translucent MapLibre fill over the same Liberty basemap used in Country Lens, so its labels, terrain, and restrained boundary weights remain visible. Largest Exporters uses the product's true maximum and a square-root color transform: dominant exporters retain their real position in the scale while smaller positive values remain visible, and zero exports have a separate neutral state. Net exports use a distinct red–neutral–blue diverging scale. The other metric color domains currently cap at the 95th percentile; legend endpoints use ≤/≥ labels and state when values beyond them are saturated. Legend and year controls retain their map-overlay positions. Hovering a country shows its value; selecting it updates the comparison. Mode, year, country, product, and metric remain shareable URL parameters.
+The product-led headline reads “Compare trade in [product] worldwide.” Its product line uses the same type scale as the rest of the headline, may wrap once, and then truncates. Product and metric controls form a vertical stack directly below it, followed by the selected country’s compact four-measure comparison and ranks. The picker exposes HS2 categories and HS4 products grouped under the 21 official HS section headings, with category and product subheads inside each section. The choropleth is a translucent MapLibre fill over the same Liberty basemap used in Country Lens, so its labels, terrain, and restrained boundary weights remain visible. Largest Exporters uses the product's true maximum and a square-root color transform: dominant exporters retain their real position in the scale while smaller positive values remain visible, and zero exports have a separate neutral state. Net exports use a distinct red–neutral–blue diverging scale. The other metric color domains currently cap at the 95th percentile; legend endpoints use ≤/≥ labels and state when values beyond them are saturated. Legend and year controls retain their map-overlay positions. Hovering a country shows its value; selecting it updates the comparison and reveals product-specific bilateral routes. Net exporters draw outbound paths to their ten leading destinations; net importers draw inbound paths from their ten leading sources. A schematic leader opens a ranked readout that labels the gross direction, country status, partner shares, values, and top-ten coverage so the route measure remains distinct from the choropleth metric. Mode, year, country, product, and metric remain shareable URL parameters.
 
 ## Shared country control
 
@@ -159,12 +159,13 @@ public/data/trade/
     ├── 2022.json
     ├── 2023.json
 │   └── 2024.json
-└── hs4/
+├── hs4/
     ├── lens/{year}.json
     └── years/{year}/{parent-hs2}.json
+└── routes/{year}/{parent-hs2}.json
 ```
 
-Shared metadata and geometry load once. One complete HS2 file and one compact leading-HS4 fingerprint file load for the active year. Country changes, metric changes, and chart transitions operate in memory. Neighboring years are cached or prefetched. An exact HS4 overlay loads one partition for its active year and parent HS2 chapter.
+Shared metadata and geometry load once. One complete HS2 file and one compact leading-HS4 fingerprint file load for the active year. Country changes, metric changes, and chart transitions operate in memory. Neighboring years are cached or prefetched. An exact HS4 overlay loads one partition for its active year and parent HS2 chapter. Product-specific route data remains in a separate partition and loads only after a country is selected in Product Overlay.
 
 ### HS4 refinement
 
@@ -202,6 +203,7 @@ For each country, product, and year:
 - World-export share = product exports / worldwide exports of that product
 - Revealed comparative advantage
 - Per-measure country ranks
+- Top ten product-specific bilateral destinations for net exporters or sources for net importers
 
 ## Build phases
 
@@ -258,6 +260,16 @@ Exit condition: the codebase reads as one intentional implementation with no dup
 
 Exit condition: users can move from a broad HS2 chapter to recognizable HS4 products without materially increasing the initial page load.
 
+### Phase 7 — Product route web (implemented)
+
+- Preserve BACI's exporter-importer relationship while aggregating HS6 flows to HS2 and HS4.
+- Emit separate lazy route partitions rather than increasing the initial overlay payload.
+- Choose the economically dominant direction automatically: destinations for net exporters and sources for net importers.
+- Draw shadowed flight-path arcs in the real flow direction and animate moving particles along them.
+- Connect the selected country to a ranked top-ten route readout with partner shares, values, coverage, and an explicit net-exporter or net-importer label.
+
+Exit condition: selecting a country in Product Overlay explains where the selected product goes or comes from without changing the meaning of the choropleth.
+
 ## Success criteria
 
 The prototype succeeds when a user can:
@@ -268,6 +280,7 @@ The prototype succeeds when a user can:
 4. Select a radial HS4 readout and see its worldwide export pattern.
 5. Change overlay metrics and inspect country values without leaving the map.
 6. Use the experience on desktop and mobile without stale panels or duplicated controls.
+7. Select a country in Product Overlay and trace the selected product to its leading trade partners.
 
 ## Sources
 

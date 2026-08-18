@@ -63,6 +63,216 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .maplibregl-ctrl-group button { width: 34px; height: 34px; }
 .maplibregl-ctrl-attrib { color: #5f6965; font-size: 10px; }
 
+.trade-route-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+.trade-route-shadow,
+.trade-route-line,
+.trade-route-connector-shadow,
+.trade-route-connector {
+  fill: none;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  animation: route-path-draw 920ms cubic-bezier(0.16, 0.78, 0.22, 1) forwards;
+}
+.trade-route-shadow {
+  stroke: rgba(21, 31, 28, 0.25);
+  filter: blur(2.4px);
+  transform: translateY(2px);
+}
+.trade-route-line { stroke: #bd5b36; }
+.trade-route-layer.is-imports .trade-route-line { stroke: #216b91; }
+.trade-route-particle { fill: #a94627; filter: drop-shadow(0 1px 2px rgba(23, 35, 31, 0.45)); }
+.trade-route-layer.is-imports .trade-route-particle { fill: #155a80; }
+.trade-route-endpoint {
+  fill: #fffdf7;
+  stroke: #a94627;
+  stroke-width: 1.5;
+  opacity: 0;
+  animation: route-node-arrive 260ms ease forwards;
+}
+.trade-route-layer.is-imports .trade-route-endpoint { stroke: #155a80; }
+.trade-route-origin-halo {
+  fill: rgba(255, 253, 247, 0.44);
+  stroke: rgba(23, 35, 31, 0.3);
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: route-origin-pulse 1.8s ease-out infinite;
+}
+.trade-route-origin {
+  fill: #fffdf7;
+  stroke: #9e4327;
+  stroke-width: 2.5;
+}
+.trade-route-layer.is-imports .trade-route-origin { stroke: #155a80; }
+.trade-route-connector-shadow,
+.trade-route-connector { animation-delay: 320ms; }
+.trade-route-connector-shadow {
+  stroke: rgba(255, 253, 247, 0.88);
+  stroke-width: 5;
+}
+.trade-route-connector {
+  stroke: rgba(23, 35, 31, 0.72);
+  stroke-width: 1.1;
+}
+
+.trade-route-panel {
+  position: absolute;
+  z-index: 8;
+  overflow: hidden;
+  border: 1px solid rgba(23, 35, 31, 0.21);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.92);
+  box-shadow: 0 15px 42px rgba(23, 35, 31, 0.2);
+  color: var(--ink);
+  pointer-events: auto;
+  backdrop-filter: blur(14px);
+  animation: route-panel-arrive 470ms 280ms cubic-bezier(0.16, 0.78, 0.22, 1) both;
+}
+.trade-route-close {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  z-index: 1;
+  width: 25px;
+  height: 25px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.trade-route-close:hover { background: rgba(23, 35, 31, 0.07); color: var(--ink); }
+.trade-route-panel header {
+  display: grid;
+  gap: 2px;
+  padding: 11px 38px 10px 13px;
+  border-bottom: 1px solid rgba(23, 35, 31, 0.13);
+}
+.trade-route-panel header > span {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 780;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+.trade-route-panel header > strong {
+  overflow: hidden;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trade-route-panel header > em {
+  font-size: 0.55rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.trade-route-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 13px;
+  background: rgba(23, 35, 31, 0.035);
+}
+.trade-route-summary span { color: var(--muted); font-size: 0.59rem; font-weight: 750; }
+.trade-route-summary strong { font-family: Georgia, "Times New Roman", serif; font-size: 0.9rem; }
+.trade-route-panel ol {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 4px 10px 5px;
+  list-style: none;
+}
+.trade-route-panel li {
+  display: grid;
+  min-height: 22px;
+  grid-template-columns: 18px minmax(0, 1fr) 46px 58px;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px;
+  border-bottom: 1px solid rgba(23, 35, 31, 0.07);
+  line-height: 1.15;
+  opacity: 0;
+  transform: translateY(-8px);
+  animation: route-row-arrive 310ms cubic-bezier(0.16, 0.78, 0.22, 1) forwards;
+}
+.trade-route-panel li:last-child { border-bottom: 0; }
+.trade-route-panel li > small {
+  color: #87918d;
+  font-size: 0.48rem;
+  font-weight: 800;
+  text-align: right;
+}
+.trade-route-panel li > span {
+  overflow: hidden;
+  font-size: 0.65rem;
+  font-weight: 690;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trade-route-panel li > strong { font-size: 0.62rem; text-align: right; }
+.trade-route-panel li > em {
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-style: normal;
+  text-align: right;
+}
+.trade-route-panel footer {
+  padding: 7px 13px 9px;
+  border-top: 1px solid rgba(23, 35, 31, 0.12);
+  color: var(--muted);
+  font-size: 0.53rem;
+}
+.trade-route-empty {
+  margin: 0;
+  padding: 13px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+.trade-route-status {
+  position: absolute;
+  z-index: 8;
+  right: 22px;
+  top: 230px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 11px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(23, 35, 31, 0.14);
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.trade-route-status i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(23, 35, 31, 0.24);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+.trade-route-status button { border: 0; background: transparent; color: var(--accent-dark); cursor: pointer; font-size: inherit; }
+
 .brand-panel,
 .view-dock,
 .map-legend,
@@ -798,6 +1008,25 @@ dd {
   from { stroke-dashoffset: 1; }
   to { stroke-dashoffset: 0; }
 }
+@keyframes route-path-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes route-node-arrive {
+  from { opacity: 0; transform: scale(0.3); transform-origin: center; }
+  to { opacity: 1; transform: scale(1); transform-origin: center; }
+}
+@keyframes route-origin-pulse {
+  0% { opacity: 0.82; transform: scale(0.55); }
+  75%, 100% { opacity: 0; transform: scale(1.65); }
+}
+@keyframes route-panel-arrive {
+  from { opacity: 0; transform: translateY(-12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes route-row-arrive {
+  to { opacity: 1; transform: translateY(0); }
+}
 
 @media (max-width: 900px) {
   .brand-panel { max-width: 330px; }
@@ -863,6 +1092,12 @@ dd {
   .metric-switch button { display: block; padding: 7px; }
   .metric-switch button span { display: none; }
   .map-legend { top: auto; right: 10px; bottom: 266px; width: 190px; }
+  .trade-route-status { top: auto; right: 10px; bottom: 96px; }
+  .trade-route-panel ol { max-height: 185px; overflow: auto; }
+  .trade-route-panel li { grid-template-columns: 16px minmax(0, 1fr) 42px 52px; gap: 4px; }
+  .trade-route-panel li > span { font-size: 0.59rem; }
+  .trade-route-panel li > strong { font-size: 0.57rem; }
+  .trade-route-panel li > em { font-size: 0.5rem; }
   .legend-labels-multi { font-size: 0.45rem; }
   .overlay-profile-heading { font-size: 0.62rem; }
   .overlay-profile dl div { padding: 8px 6px; }
@@ -876,4 +1111,5 @@ dd {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+  .trade-route-particle { display: none; }
 }

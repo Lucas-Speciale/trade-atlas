@@ -26,6 +26,8 @@ import type {
   OverlayDatum,
   OverlayMetric,
   ProductSelection,
+  RoutePartition,
+  TradeRouteView,
   TradeGeometry,
   YearData,
 } from "@/types/trade";
@@ -101,10 +103,12 @@ export function TradeExplorer() {
   const yearCache = useRef(new Map<number, YearData>());
   const hs4LensCache = useRef(new Map<number, Hs4LensYear>());
   const hs4PartitionCache = useRef(new Map<string, Hs4Partition>());
+  const routePartitionCache = useRef(new Map<string, RoutePartition>());
   const [base, setBase] = useState<BaseData | null>(null);
   const [yearData, setYearData] = useState<YearData | null>(null);
   const [hs4LensData, setHs4LensData] = useState<Hs4LensYear | null>(null);
   const [hs4Partition, setHs4Partition] = useState<Hs4Partition | null>(null);
+  const [routePartition, setRoutePartition] = useState<RoutePartition | null>(null);
   const [mode, setMode] = useState<ExplorerMode>(initial.mode);
   const [year, setYear] = useState(initial.year);
   const [activeIso3, setActiveIso3] = useState(initial.country);
@@ -117,6 +121,9 @@ export function TradeExplorer() {
     nonce: number;
   } | null>(null);
   const [loadingYear, setLoadingYear] = useState(false);
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [routeCountryIso3, setRouteCountryIso3] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
   const [countryQuery, setCountryQuery] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -312,6 +319,33 @@ export function TradeExplorer() {
     return () => controller.abort();
   }, [selectedProduct, year]);
 
+  useEffect(() => {
+    if (mode !== "overlay" || !routeCountryIso3 || !selectedProduct) return;
+    const hs2 = selectedProduct.hs2Ids[0];
+    const cacheKey = `${year}:${hs2}`;
+    const cached = routePartitionCache.current.get(cacheKey);
+    if (cached) {
+      const frame = requestAnimationFrame(() => {
+        setRoutePartition(cached);
+        setRouteError(null);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    const controller = new AbortController();
+    setLoadingRoutes(true);
+    setRouteError(null);
+    fetchJson<RoutePartition>(`${DATA_ROOT}/routes/${year}/${hs2}.json`, controller.signal)
+      .then((data) => {
+        routePartitionCache.current.set(cacheKey, data);
+        setRoutePartition(data);
+      })
+      .catch((reason: unknown) => {
+        if ((reason as Error).name !== "AbortError") setRouteError((reason as Error).message);
+      })
+      .finally(() => setLoadingRoutes(false));
+    return () => controller.abort();
+  }, [mode, routeCountryIso3, selectedProduct, year]);
+
   const overlayData = useMemo<OverlayDatum[]>(() => {
     if (!yearData || !selectedProduct) return [];
     if (selectedProduct.kind === "hs4") {
@@ -370,6 +404,63 @@ export function TradeExplorer() {
     ? displayCountryName(destinationMeta.iso3, destinationMeta.name)
     : null;
   const displayedCountryQuery = countryQuery ?? activeCountryName;
+  const routeFlow = useMemo<TradeRouteView | null>(() => {
+    if (
+      mode !== "overlay"
+      || !routeCountryIso3
+      || !selectedProduct
+      || !activeOverlay
+      || resolvedIso3 !== routeCountryIso3
+      || routePartition?.year !== year
+      || routePartition.hs2 !== selectedProduct.hs2Ids[0]
+    ) return null;
+    const routes = selectedProduct.kind === "hs4" && selectedProduct.hs4Id
+      ? routePartition.hs4Routes[selectedProduct.hs4Id] ?? []
+      : routePartition.hs2Routes;
+    const countryRoute = routes.find(([iso3]) => iso3 === routeCountryIso3);
+    const directionCode = countryRoute?.[1] ?? (activeOverlay.net < 0 ? -1 : 1);
+    const direction = directionCode === -1 ? "imports" : "exports";
+    const total = direction === "exports" ? activeOverlay.exports : activeOverlay.imports;
+    const originGeometry = geometryByCountry.get(routeCountryIso3);
+    if (!originGeometry) return null;
+    const partners = (countryRoute?.[2] ?? []).flatMap(([iso3, shareBasisPoints]) => {
+      const meta = countriesById.get(iso3);
+      const partnerGeometry = geometryByCountry.get(iso3);
+      if (!meta || !partnerGeometry) return [];
+      const share = shareBasisPoints / 10_000;
+      return [{
+        iso3,
+        name: displayCountryName(meta.iso3, meta.name),
+        center: [partnerGeometry.labelX, partnerGeometry.labelY] as [number, number],
+        share,
+        value: total * share,
+      }];
+    });
+    return {
+      key: `${year}:${selectedProduct.id}:${routeCountryIso3}:${direction}`,
+      originIso3: routeCountryIso3,
+      originName: activeCountryName,
+      originCenter: [originGeometry.labelX, originGeometry.labelY],
+      productName: selectedProduct.label.replace(/^\d{2,4}\s·\s/, ""),
+      year,
+      direction,
+      net: activeOverlay.net,
+      total,
+      minimumTradeValue: routePartition.minimumTradeValue,
+      partners,
+    };
+  }, [
+    activeCountryName,
+    activeOverlay,
+    countriesById,
+    geometryByCountry,
+    mode,
+    resolvedIso3,
+    routeCountryIso3,
+    routePartition,
+    selectedProduct,
+    year,
+  ]);
 
   const selectCountry = (iso3: string, moveMap = false) => {
     if (!yearCountriesById.has(iso3)) return;
@@ -405,6 +496,7 @@ export function TradeExplorer() {
       setFocusRequest({ iso3: "WORLD", center: [5, 22], zoom: 1.45, nonce: Date.now() });
       return;
     }
+    setRouteCountryIso3(null);
     const properties = geometryByCountry.get(resolvedIso3);
     if (properties) {
       setFocusRequest({
@@ -458,9 +550,16 @@ export function TradeExplorer() {
           activeIso3={resolvedIso3}
           overlayMetric={metric}
           overlayValues={mode === "overlay" ? overlayValues : new Map()}
+          routeFlow={routeFlow}
+          routeLoading={mode === "overlay" && Boolean(routeCountryIso3) && loadingRoutes}
+          routeError={mode === "overlay" && routeCountryIso3 ? routeError : null}
           focusRequest={focusRequest ?? initialFocusRequest}
+          onClearRoute={() => setRouteCountryIso3(null)}
           onCountryFocus={(iso3) => {
-            if (iso3) selectCountry(iso3);
+            if (iso3) {
+              selectCountry(iso3);
+              if (mode === "overlay") setRouteCountryIso3(iso3);
+            }
             else if (mode === "country") setActiveIso3("");
           }}
         />

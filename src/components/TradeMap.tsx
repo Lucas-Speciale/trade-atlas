@@ -5,8 +5,15 @@ import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, MapGeoJSONFeature } from "maplibre-gl";
 
 import { displayCountryName } from "@/lib/countryNames";
-import { formatMetric } from "@/lib/format";
-import type { ExplorerMode, OverlayMetric, TradeGeometry } from "@/types/trade";
+import { formatCurrency, formatMetric, formatPercent } from "@/lib/format";
+import { makeRouteCurve, routeLineWidth } from "@/lib/routes";
+import type {
+  ExplorerMode,
+  OverlayMetric,
+  TradeGeometry,
+  TradeRoutePartner,
+  TradeRouteView,
+} from "@/types/trade";
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 // Next's client bundle does not preserve MapLibre's module URL, so the worker needs an explicit entry point.
@@ -23,7 +30,11 @@ interface TradeMapProps {
   activeIso3: string;
   overlayMetric: OverlayMetric;
   overlayValues: Map<string, { color: string; value: number }>;
+  routeFlow: TradeRouteView | null;
+  routeLoading: boolean;
+  routeError: string | null;
   focusRequest: { iso3: string; center: [number, number]; zoom?: number; nonce: number } | null;
+  onClearRoute: () => void;
   onCountryFocus: (iso3: string | null) => void;
 }
 
@@ -46,6 +57,19 @@ interface HitPolygon {
 interface HitCountry {
   iso3: string;
   polygons: HitPolygon[];
+}
+
+interface ProjectedRoute {
+  partner: TradeRoutePartner;
+  path: string;
+  end: { x: number; y: number };
+}
+
+interface RouteProjection {
+  width: number;
+  height: number;
+  origin: { x: number; y: number };
+  routes: ProjectedRoute[];
 }
 
 function preparePolygon(rings: number[][][]): HitPolygon {
@@ -125,7 +149,11 @@ export function TradeMap({
   activeIso3,
   overlayMetric,
   overlayValues,
+  routeFlow,
+  routeLoading,
+  routeError,
   focusRequest,
+  onClearRoute,
   onCountryFocus,
 }: TradeMapProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -138,8 +166,11 @@ export function TradeMap({
   const activeIso3Ref = useRef(activeIso3);
   const focusRequestRef = useRef(focusRequest);
   const overlayValuesRef = useRef(overlayValues);
+  const routeFlowRef = useRef(routeFlow);
+  const projectRoutesRef = useRef<(() => void) | null>(null);
   const [hoveredIso3, setHoveredIso3] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [routeProjection, setRouteProjection] = useState<RouteProjection | null>(null);
   const hitCountries = useMemo(() => prepareHitCountries(geometry), [geometry]);
 
   useEffect(() => {
@@ -171,6 +202,12 @@ export function TradeMap({
   }, [overlayValues]);
 
   useEffect(() => {
+    routeFlowRef.current = routeFlow;
+    const frame = requestAnimationFrame(() => projectRoutesRef.current?.());
+    return () => cancelAnimationFrame(frame);
+  }, [routeFlow]);
+
+  useEffect(() => {
     if (!frameRef.current || mapRef.current) return;
 
     maplibregl.setWorkerUrl(MAPLIBRE_WORKER_URL);
@@ -190,6 +227,38 @@ export function TradeMap({
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
+
+    const projectRoutes = () => {
+      const flow = routeFlowRef.current;
+      const frame = frameRef.current;
+      if (!flow || !frame) {
+        setRouteProjection(null);
+        return;
+      }
+      const origin = map.project(flow.originCenter);
+      const routes = flow.partners.map((partner) => {
+        const partnerCandidates = [-360, 0, 360].map((offset) =>
+          map.project([partner.center[0] + offset, partner.center[1]]),
+        );
+        const endpoint = partnerCandidates.reduce((nearest, candidate) =>
+          Math.abs(candidate.x - origin.x) < Math.abs(nearest.x - origin.x) ? candidate : nearest,
+        );
+        const start = flow.direction === "exports" ? origin : endpoint;
+        const end = flow.direction === "exports" ? endpoint : origin;
+        return {
+          partner,
+          path: makeRouteCurve(start, end).path,
+          end: endpoint,
+        };
+      });
+      setRouteProjection({
+        width: frame.clientWidth,
+        height: frame.clientHeight,
+        origin,
+        routes,
+      });
+    };
+    projectRoutesRef.current = projectRoutes;
 
     const selectAtLens = () => {
       if (
@@ -283,11 +352,14 @@ export function TradeMap({
       });
       readyRef.current = true;
       map.on("move", requestLensSelection);
+      map.on("move", projectRoutes);
       map.on("moveend", selectAtLens);
+      map.on("resize", projectRoutes);
       map.on("mousemove", FILL_LAYER, handleHover);
       map.on("mouseleave", FILL_LAYER, clearHover);
       map.on("click", FILL_LAYER, handleClick);
       requestLensSelection();
+      projectRoutes();
       const pendingFocus = focusRequestRef.current;
       if (pendingFocus) {
         map.jumpTo({ center: pendingFocus.center, zoom: pendingFocus.zoom ?? Math.max(map.getZoom(), 2.2) });
@@ -305,6 +377,7 @@ export function TradeMap({
     return () => {
       if (selectionFrameRef.current !== null) cancelAnimationFrame(selectionFrameRef.current);
       readyRef.current = false;
+      projectRoutesRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -345,9 +418,163 @@ export function TradeMap({
   }, [focusRequest]);
 
   const tooltipValue = tooltip ? overlayValues.get(tooltip.iso3)?.value : undefined;
+  const routePanelWidth = routeProjection
+    ? Math.min(routeProjection.width <= 700 ? 300 : 320, routeProjection.width - 20)
+    : 320;
+  const routePanelDefaultLeft = routeProjection
+    ? routeProjection.width - routePanelWidth - (routeProjection.width <= 700 ? 10 : 22)
+    : 0;
+  const routePanelLeft = routeProjection
+    ? routeProjection.width > 700 && routeProjection.origin.x > routePanelDefaultLeft - 24
+      ? Math.max(360, routeProjection.origin.x - routePanelWidth - 86)
+      : routePanelDefaultLeft
+    : 0;
+  const routePanelTop = routeProjection
+    ? routeProjection.width <= 700
+      ? Math.max(150, routeProjection.height - 405)
+      : Math.min(230, Math.max(130, routeProjection.height - 510))
+    : 0;
+  const routePanelIsLeftOfOrigin = routeProjection
+    ? routePanelLeft + routePanelWidth / 2 < routeProjection.origin.x
+    : false;
+  const routePanelAnchorX = routePanelIsLeftOfOrigin
+    ? routePanelLeft + routePanelWidth
+    : routePanelLeft;
+  const routeConnectorElbowX = routeProjection
+    ? routePanelIsLeftOfOrigin
+      ? Math.min(routeProjection.origin.x - 24, routePanelAnchorX + 34)
+      : Math.max(routeProjection.origin.x + 24, routePanelAnchorX - 34)
+    : 0;
+  const connectorPath = routeProjection && routeFlow
+    ? `M ${routeProjection.origin.x} ${routeProjection.origin.y} L ${routeConnectorElbowX} ${routeProjection.origin.y} L ${routePanelAnchorX} ${routePanelTop + 54}`
+    : null;
+  const routeCoverage = Math.min(
+    1,
+    routeFlow?.partners.reduce((sum, partner) => sum + partner.share, 0) ?? 0,
+  );
 
   return (
     <div ref={frameRef} className="map-canvas" aria-label="Interactive world trade map">
+      {routeFlow && routeProjection && (
+        <svg
+          className={`trade-route-layer is-${routeFlow.direction}`}
+          width={routeProjection.width}
+          height={routeProjection.height}
+          aria-hidden="true"
+        >
+          <g key={routeFlow.key} className="trade-route-paths">
+            {routeProjection.routes.map((route, index) => (
+              <g key={route.partner.iso3}>
+                <path
+                  className="trade-route-shadow"
+                  d={route.path}
+                  pathLength={1}
+                  style={{
+                    animationDelay: `${index * 55}ms`,
+                    strokeWidth: routeLineWidth(route.partner.share) + 4,
+                  }}
+                />
+                <path
+                  className="trade-route-line"
+                  d={route.path}
+                  pathLength={1}
+                  style={{
+                    animationDelay: `${index * 55}ms`,
+                    strokeWidth: routeLineWidth(route.partner.share),
+                  }}
+                />
+                <circle className="trade-route-particle" r={2.2}>
+                  <animateMotion
+                    path={route.path}
+                    begin={`${0.75 + index * 0.08}s`}
+                    dur={`${2.1 + index * 0.07}s`}
+                    repeatCount="indefinite"
+                  />
+                </circle>
+                <circle
+                  className="trade-route-endpoint"
+                  cx={route.end.x}
+                  cy={route.end.y}
+                  r={2.4 + Math.sqrt(route.partner.share) * 4}
+                  style={{ animationDelay: `${500 + index * 55}ms` }}
+                />
+              </g>
+            ))}
+            <circle
+              className="trade-route-origin-halo"
+              cx={routeProjection.origin.x}
+              cy={routeProjection.origin.y}
+              r={10}
+            />
+            <circle
+              className="trade-route-origin"
+              cx={routeProjection.origin.x}
+              cy={routeProjection.origin.y}
+              r={4.5}
+            />
+            {connectorPath && (
+              <>
+                <path className="trade-route-connector-shadow" d={connectorPath} pathLength={1} />
+                <path className="trade-route-connector" d={connectorPath} pathLength={1} />
+              </>
+            )}
+          </g>
+        </svg>
+      )}
+
+      {routeFlow && routeProjection && (
+        <aside
+          key={routeFlow.key}
+          className={`trade-route-panel is-${routeFlow.direction}`}
+          style={{ left: routePanelLeft, top: routePanelTop, width: routePanelWidth }}
+          aria-live="polite"
+        >
+          <button className="trade-route-close" type="button" onClick={onClearRoute} aria-label="Close trade routes">×</button>
+          <header>
+            <span>{routeFlow.originName} · {routeFlow.year}</span>
+            <strong>{routeFlow.productName}</strong>
+            <em className={routeFlow.net >= 0 ? "positive" : "negative"}>
+              {routeFlow.net >= 0 ? "Net exporter" : "Net importer"} · {formatCurrency(Math.abs(routeFlow.net))}
+            </em>
+          </header>
+          <div className="trade-route-summary">
+            <span>{routeFlow.direction === "exports" ? "Top export destinations" : "Top import sources"}</span>
+            <strong>{formatCurrency(routeFlow.total)}</strong>
+          </div>
+          {routeFlow.partners.length > 0 ? (
+            <>
+              <ol>
+                {routeFlow.partners.map((partner, index) => (
+                  <li key={partner.iso3} style={{ animationDelay: `${260 + index * 48}ms` }}>
+                    <small>{index + 1}</small>
+                    <span>{partner.name}</span>
+                    <strong>{formatPercent(partner.share)}</strong>
+                    <em>{formatCurrency(partner.value)}</em>
+                  </li>
+                ))}
+              </ol>
+              <footer>
+                Top {routeFlow.partners.length} account for {formatPercent(routeCoverage)} of {routeFlow.direction}.
+              </footer>
+            </>
+          ) : (
+            <p className="trade-route-empty">
+              Route detail is shown when this product flow exceeds {formatCurrency(routeFlow.minimumTradeValue)}.
+            </p>
+          )}
+        </aside>
+      )}
+
+      {!routeFlow && routeLoading && (
+        <div className="trade-route-status"><i />Tracing product routes…</div>
+      )}
+      {!routeFlow && routeError && (
+        <div className="trade-route-status is-error">
+          Route data could not be loaded.
+          <button type="button" onClick={onClearRoute}>Dismiss</button>
+        </div>
+      )}
+
       {tooltip && (
         <div className="map-tooltip" style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}>
           <strong>{tooltip.name}</strong>

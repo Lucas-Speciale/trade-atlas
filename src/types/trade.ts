@@ -24,6 +24,7 @@ export interface Manifest {
     yearPattern: string;
     hs4LensYearPattern: string;
     hs4PartitionPattern: string;
+    routePartitionPattern: string;
   };
 }
 
@@ -100,6 +101,45 @@ export interface Hs4Partition {
   year: number;
   hs2: string;
   products: Record<string, Hs4CountryFlow[]>;
+}
+
+export type RouteDirectionCode = 1 | -1;
+export type RoutePartnerDatum = [iso3: string, shareBasisPoints: number];
+export type RouteCountryDatum = [
+  iso3: string,
+  direction: RouteDirectionCode,
+  partners: RoutePartnerDatum[],
+];
+
+export interface RoutePartition {
+  schemaVersion: number;
+  year: number;
+  hs2: string;
+  minimumTradeValue: number;
+  hs2Routes: RouteCountryDatum[];
+  hs4Routes: Record<string, RouteCountryDatum[]>;
+}
+
+export interface TradeRoutePartner {
+  iso3: string;
+  name: string;
+  center: [number, number];
+  share: number;
+  value: number;
+}
+
+export interface TradeRouteView {
+  key: string;
+  originIso3: string;
+  originName: string;
+  originCenter: [number, number];
+  productName: string;
+  year: number;
+  direction: "exports" | "imports";
+  net: number;
+  total: number;
+  minimumTradeValue: number;
+  partners: TradeRoutePartner[];
 }
 
 export interface MapProperties {

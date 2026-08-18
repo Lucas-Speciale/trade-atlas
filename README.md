@@ -16,6 +16,7 @@ The runtime is deliberately small: there is no application API, database, or arb
 - HS4 product navigation from the country lens into a worldwide overlay
 - HS2 category and HS4 product overlays
 - Largest exporters, export dependence, net exporters, and specialization (RCA)
+- Product-specific route webs from a selected country to its ten leading destinations or sources
 - Shareable URL state for mode, year, country, product, and metric
 - Responsive layout, reduced-motion behavior, and static production output
 
@@ -52,7 +53,8 @@ Local World Bank country GeoJSON
                 │
                 ▼
 React SVG/HTML HUD: focus wash, country lens,
-radial readouts, overlay controls, and year carousel
+radial readouts, animated routes, overlay controls,
+and year carousel
 ```
 
 MapLibre owns projection, map movement, labels, geographic layers, and pointer feature events. React owns application state and the viewport-sized HUD. During movement, the lens center is converted back to longitude/latitude and checked against a precomputed local Admin 0 polygon index. In country mode the pointer only drags or zooms the map; search can move a country into the lens. When the lens is over ocean, the country fingerprint and statistics clear.
@@ -60,6 +62,8 @@ MapLibre owns projection, map movement, labels, geographic layers, and pointer f
 The country lens arranges the leading HS4 products clockwise across its upper semicircle. Each readout names the product, shows its exact share of the country's total merchandise exports, and includes the underlying export value. Readouts draw and count up when the selected country or year changes. A neutral **All other products** readout accounts for the remainder of the export basket; hovering or focusing it flows open the remaining retained HS4 rankings and an honest residual for products below the compact fingerprint.
 
 The UI calculates HS2 overlays in memory. Changing year loads one immutable HS2 annual file plus a compact file containing each country's leading HS4 products; neighboring years are prefetched and cached. Selecting an HS4 product lazily loads only its year and parent-HS2 partition, then calculates country measures and ranks in the browser.
+
+In Product Overlay, clicking a country lazily loads one separate route partition for the selected year and parent HS2 chapter. BACI's bilateral rows are pre-aggregated to the selected HS2 or HS4 product, classified as outbound for a net exporter or inbound for a net importer, and reduced to ten mapped partners. SVG flight paths draw in the true flow direction and the companion readout states the gross route measure separately from the map's selected overlay metric.
 
 ## Data pipeline
 
@@ -72,6 +76,7 @@ DuckDB aggregation + Python validation
         ├── country × year × HS2 measures
         ├── leading country × year × HS4 fingerprints
         ├── lazy year × parent-HS2 overlay partitions
+        ├── lazy top-ten bilateral route partitions
         ├── country totals and leading destination
         └── explicit BACI ↔ map ISO3 crosswalk
         │
@@ -79,7 +84,7 @@ DuckDB aggregation + Python validation
 public/data/trade/*.json + geometry.geojson
 ```
 
-The generated browser assets live in `public/data/trade/`. The raw BACI archive, boundary source archive, Python environment, and validation report are development inputs and are not required by the deployed app.
+The generated browser assets live in `public/data/trade/`. Route files are separate from the initial overlay payload and are fetched only after a country is selected. The raw BACI archive, boundary source archive, Python environment, and validation report are development inputs and are not required by the deployed app.
 
 To reproduce the assets:
 
@@ -99,6 +104,7 @@ The build validates archive integrity, duplicate country/product keys, HS2/HS4 m
 - `exportShare`: product exports divided by all merchandise exports from that country
 - `worldExportShare`: country exports divided by worldwide exports of that product
 - `rca`: the product's share of a country's exports divided by its share of world exports
+- `route share`: bilateral product flow divided by the selected country's gross exports or imports of that product; routes are emitted for product-direction totals of at least $1 million
 
 Values are current US dollars. BACI's source field is reported in thousands of dollars and converted during the data build.
 
