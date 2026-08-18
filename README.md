@@ -132,3 +132,7 @@ data/raw/world-bank/     Boundary inputs and source notes
 public/data/trade/       Deployable static assets
 CONCEPT.md               Product concept and phased plan
 ```
+
+## Deployment
+
+Pushes to `main` are tested, statically exported, and deployed to the existing Cloudflare Pages project by `.github/workflows/deploy.yml`. The workflow requires the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
