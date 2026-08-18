@@ -31,6 +31,19 @@ import type {
 } from "@/types/trade";
 
 const DATA_ROOT = "/data/trade";
+const NO_EXPORT_COLOR = "#d8d6cf";
+const WORLD_SHARE_COLOR_FLOOR = 0.2;
+const WORLD_SHARE_LEGEND_STOPS = [0, 0.25, 0.5, 0.75, 1];
+
+function worldShareColor(value: number): string {
+  return interpolateYlGnBu(
+    WORLD_SHARE_COLOR_FLOOR + (1 - WORLD_SHARE_COLOR_FLOOR) * value,
+  );
+}
+
+const WORLD_SHARE_RAMP = `linear-gradient(90deg, ${WORLD_SHARE_LEGEND_STOPS
+  .map((stop) => `${worldShareColor(stop)} ${stop * 100}%`)
+  .join(", ")})`;
 
 const METRICS: Array<{ id: OverlayMetric; label: string; help: string }> = [
   { id: "worldExportShare", label: "Largest exporters", help: "Share of world exports" },
@@ -322,7 +335,17 @@ export function TradeExplorer() {
   const overlayValues = useMemo(() => {
     const values = overlayData.map((item) => item[metric]);
     const colors = new Map<string, { color: string; value: number }>();
-    if (metric === "net") {
+    if (metric === "worldExportShare") {
+      const maximum = Math.max(0, ...values) || 1;
+      const scale = scaleSequentialSqrt<string>(worldShareColor).domain([0, maximum]).clamp(true);
+      overlayData.forEach((item) => {
+        const value = item.worldExportShare;
+        colors.set(item.iso3, {
+          color: value > 0 ? scale(value) : NO_EXPORT_COLOR,
+          value,
+        });
+      });
+    } else if (metric === "net") {
       const cap = percentile(values.map(Math.abs), 0.95) || 1;
       const scale = scaleDivergingSymlog<string>(interpolateRdBu).domain([-cap, 0, cap]).clamp(true);
       overlayData.forEach((item) => colors.set(item.iso3, { color: scale(item.net), value: item.net }));
@@ -421,7 +444,10 @@ export function TradeExplorer() {
   const legendMaximum = metric === "net"
     ? Math.max(0, ...legendValues.map(Math.abs))
     : Math.max(0, ...legendValues);
-  const legendIsCapped = legendCap > 0 && legendCap < legendMaximum;
+  const legendIsCapped = metric !== "worldExportShare" && legendCap > 0 && legendCap < legendMaximum;
+  const worldShareLegendValues = WORLD_SHARE_LEGEND_STOPS.map((stop) => (
+    stop === 0 ? null : legendMaximum * stop ** 2
+  ));
 
   return (
     <main className={`trade-app mode-${mode}`}>
@@ -563,12 +589,29 @@ export function TradeExplorer() {
         {mode === "overlay" && (
           <div className="map-legend" aria-label={`${activeMetricInfo.label} color scale`}>
             <span>{activeMetricInfo.help}</span>
-            {legendIsCapped && <small>Color saturates beyond the shown endpoints.</small>}
-            <div className={metric === "net" ? "legend-ramp diverging" : "legend-ramp sequential"} />
-            <div className="legend-labels">
-              <span>{metric === "net" && legendIsCapped ? `≤ ${formatMetric(metric, -legendCap)}` : metric === "net" ? formatMetric(metric, -legendCap) : "0"}</span>
-              <span>{legendIsCapped ? `≥ ${formatMetric(metric, legendCap)}` : formatMetric(metric, legendCap)}</span>
-            </div>
+            {metric === "worldExportShare" ? (
+              <>
+                <small>Full range · square-root scale</small>
+                <div className="legend-zero-key"><i />No recorded exports</div>
+                <div className="legend-ramp sequential full-range" style={{ background: WORLD_SHARE_RAMP }} />
+                <div className="legend-labels legend-labels-multi">
+                  {worldShareLegendValues.map((value, index) => (
+                    <span key={WORLD_SHARE_LEGEND_STOPS[index]}>
+                      {value === null ? ">0" : formatMetric(metric, value)}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                {legendIsCapped && <small>Color saturates beyond the shown endpoints.</small>}
+                <div className={metric === "net" ? "legend-ramp diverging" : "legend-ramp sequential"} />
+                <div className="legend-labels">
+                  <span>{metric === "net" && legendIsCapped ? `≤ ${formatMetric(metric, -legendCap)}` : metric === "net" ? formatMetric(metric, -legendCap) : "0"}</span>
+                  <span>{legendIsCapped ? `≥ ${formatMetric(metric, legendCap)}` : formatMetric(metric, legendCap)}</span>
+                </div>
+              </>
+            )}
           </div>
         )}
 

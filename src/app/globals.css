@@ -715,6 +715,30 @@ dd {
 .legend-ramp.sequential { background: linear-gradient(90deg, #ffffd9, #41b6c4, #081d58); }
 .legend-ramp.diverging { background: linear-gradient(90deg, #b2182b, #f7f7f7, #2166ac); }
 .legend-labels { display: flex; justify-content: space-between; margin-top: 3px; color: var(--muted); font-size: 0.52rem; }
+.legend-zero-key {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.5rem;
+  line-height: 1;
+}
+.legend-zero-key i {
+  width: 17px;
+  height: 7px;
+  border: 1px solid rgba(23, 35, 31, 0.14);
+  border-radius: 999px;
+  background: #d8d6cf;
+}
+.legend-ramp.full-range { margin-top: 5px; }
+.legend-labels-multi {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+.legend-labels-multi span { text-align: center; }
+.legend-labels-multi span:first-child { text-align: left; }
+.legend-labels-multi span:last-child { text-align: right; }
 
 .map-tooltip {
   position: absolute;
@@ -839,6 +863,7 @@ dd {
   .metric-switch button { display: block; padding: 7px; }
   .metric-switch button span { display: none; }
   .map-legend { top: auto; right: 10px; bottom: 266px; width: 190px; }
+  .legend-labels-multi { font-size: 0.45rem; }
   .overlay-profile-heading { font-size: 0.62rem; }
   .overlay-profile dl div { padding: 8px 6px; }
   .overlay-profile dt { font-size: 0.45rem; }
