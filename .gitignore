@@ -1,0 +1,15 @@
+.DS_Store
+.venv/
+node_modules/
+.next/
+out/
+__pycache__/
+*.py[cod]
+
+# Large source archives and disposable build intermediates.
+data/raw/*.zip
+data/raw/world-bank/*.zip
+data/processed/
+
+# Generated web assets are intentionally tracked after validation.
+public/data/trade/*.tmp

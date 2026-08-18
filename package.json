@@ -1,0 +1,36 @@
+{
+  "name": "trade-atlas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "serve out",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "data:build": ".venv/bin/python scripts/build_data.py"
+  },
+  "dependencies": {
+    "d3-scale": "^4.0.2",
+    "d3-scale-chromatic": "^3.1.0",
+    "maplibre-gl": "^6.4.0",
+    "next": "^16.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-scale-chromatic": "^3.1.0",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.3.1",
+    "serve": "^14.2.6",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "source": {
+    "name": "BACI",
+    "publisher": "CEPII",
+    "classification": "HS 2017",
+    "version": "BACI_HS17_V202601",
+    "archiveSha256": "16aaa22d3b000cc87744c2c28ac97ce44394c3adf315ec259451d5bb4fcae609",
+    "valueUnit": "current USD"
+  },
+  "map": {
+    "name": "World Bank Official Administrative Boundaries",
+    "version": "2026-07-14 catalog release",
+    "scale": "low resolution"
+  },
+  "years": [
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ],
+  "defaultYear": 2023,
+  "provisionalYears": [
+    2024
+  ],
+  "hsLevel": "HS2 + HS4",
+  "files": {
+    "countries": "countries.json",
+    "products": "hs2.json",
+    "hs4Products": "hs4.json",
+    "geometry": "geometry.geojson",
+    "yearPattern": "years/{year}.json",
+    "hs4LensYearPattern": "hs4/lens/{year}.json",
+    "hs4PartitionPattern": "hs4/years/{year}/{hs2}.json"
+  }
+}
