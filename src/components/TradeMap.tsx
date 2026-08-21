@@ -184,7 +184,6 @@ export function TradeMap({
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [routeProjection, setRouteProjection] = useState<RouteProjection | null>(null);
   const [showcaseReady, setShowcaseReady] = useState(false);
-  const [showcaseStarted, setShowcaseStarted] = useState(false);
   const hitCountries = useMemo(() => prepareHitCountries(geometry), [geometry]);
 
   useEffect(() => {
@@ -226,7 +225,7 @@ export function TradeMap({
   }, [routeFlow]);
 
   useEffect(() => {
-    if (!showcase || mode !== "country" || !showcaseReady || !showcaseStarted) return;
+    if (!showcase || mode !== "country" || !showcaseReady) return;
 
     const timers = new Set<number>();
     const scheduleMove = (delay: number, center: [number, number], duration: number) => {
@@ -248,22 +247,7 @@ export function TradeMap({
       window.clearInterval(cycle);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [mode, showcase, showcaseReady, showcaseStarted]);
-
-  useEffect(() => {
-    if (!showcase) return;
-    const startShowcase = (event: MessageEvent) => {
-      if (
-        event.source === window.parent
-        && event.data?.type === "showcase-start"
-        && event.data.app === "trade-atlas"
-      ) {
-        setShowcaseStarted(true);
-      }
-    };
-    window.addEventListener("message", startShowcase);
-    return () => window.removeEventListener("message", startShowcase);
-  }, [showcase]);
+  }, [mode, showcase, showcaseReady]);
 
   useEffect(() => {
     if (!frameRef.current || mapRef.current) return;
@@ -433,11 +417,6 @@ export function TradeMap({
         map.once("idle", () => {
           requestAnimationFrame(() => {
             setShowcaseReady(true);
-            if (window.parent === window) {
-              setShowcaseStarted(true);
-            } else {
-              window.parent.postMessage({ type: "showcase-ready", app: "trade-atlas" }, "*");
-            }
           });
         });
       }
