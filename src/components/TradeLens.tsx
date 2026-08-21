@@ -20,6 +20,7 @@ interface TradeLensProps {
   destinationName: string | null;
   year: number;
   provisional: boolean;
+  moving: boolean;
   onSelectProduct: (hs4: string) => void;
 }
 
@@ -84,6 +85,7 @@ export function TradeLens({
   destinationName,
   year,
   provisional,
+  moving,
   onSelectProduct,
 }: TradeLensProps) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -91,6 +93,11 @@ export function TradeLens({
   const [size, setSize] = useState({ width: 1200, height: 820 });
   const [hoveredHs4, setHoveredHs4] = useState<string | null>(null);
   const [otherExpanded, setOtherExpanded] = useState(false);
+  const [settledReadout, setSettledReadout] = useState<{
+    country: CountryYear;
+    fingerprint: Hs4LensCountry;
+    year: number;
+  } | null>(null);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -105,6 +112,14 @@ export function TradeLens({
   useEffect(() => () => {
     if (closeOtherTimerRef.current !== null) window.clearTimeout(closeOtherTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (moving || !country || !fingerprint) return;
+    const timer = window.setTimeout(() => {
+      setSettledReadout({ country, fingerprint, year });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [country, fingerprint, moving, year]);
 
   const openOtherBreakdown = () => {
     if (closeOtherTimerRef.current !== null) window.clearTimeout(closeOtherTimerRef.current);
@@ -129,7 +144,9 @@ export function TradeLens({
     lensProducts: LensProduct[];
     otherBreakdown: OtherBreakdownItem[];
   }>(() => {
-    if (!country || !fingerprint) return { lensProducts: [], otherBreakdown: [] };
+    const readoutCountry = settledReadout?.country;
+    const readoutFingerprint = settledReadout?.fingerprint;
+    if (!readoutCountry || !readoutFingerprint) return { lensProducts: [], otherBreakdown: [] };
     const enrichProduct = (item: Hs4LensCountry["products"][number]): LensProduct => {
         const meta = products.get(item.hs4);
         const sectionIndex = meta ? Math.max(0, Number(meta.sectionId) - 1) : 20;
@@ -140,44 +157,52 @@ export function TradeLens({
           isOther: false,
         };
     };
-    const rankedProducts = [...fingerprint.products].sort((a, b) => b.exports - a.exports);
+    const rankedProducts = [...readoutFingerprint.products].sort((a, b) => b.exports - a.exports);
     const top = rankedProducts.slice(0, visibleProductCount).map(enrichProduct);
     const breakdown: OtherBreakdownItem[] = rankedProducts
       .slice(visibleProductCount)
       .map((item) => ({ ...enrichProduct(item), isResidual: false }));
     const visibleExports = top.reduce((sum, item) => sum + item.exports, 0);
-    const otherExports = Math.max(0, country.exports - visibleExports);
+    const otherExports = Math.max(0, readoutCountry.exports - visibleExports);
     if (otherExports > 0) {
       top.push({
         hs4: "other",
         name: "All other products",
         exports: otherExports,
-        exportShare: country.exports ? otherExports / country.exports : 0,
+        exportShare: readoutCountry.exports ? otherExports / readoutCountry.exports : 0,
         color: "#7b8782",
         isOther: true,
       });
     }
     const rankedExports = rankedProducts.reduce((sum, item) => sum + item.exports, 0);
-    const residualExports = Math.max(0, country.exports - rankedExports);
+    const residualExports = Math.max(0, readoutCountry.exports - rankedExports);
     if (residualExports > 0) {
       breakdown.push({
         hs4: "remainder",
         name: "Remaining products",
         exports: residualExports,
-        exportShare: country.exports ? residualExports / country.exports : 0,
+        exportShare: readoutCountry.exports ? residualExports / readoutCountry.exports : 0,
         color: "#7b8782",
         isOther: true,
         isResidual: true,
       });
     }
     return { lensProducts: top, otherBreakdown: breakdown };
-  }, [country, fingerprint, products, visibleProductCount]);
+  }, [products, settledReadout, visibleProductCount]);
+
+  const readoutReady = Boolean(
+    !moving &&
+    country &&
+    settledReadout &&
+    settledReadout.country.iso3 === country.iso3 &&
+    settledReadout.year === year,
+  );
 
   const targetPercentages = useMemo(
     () => lensProducts.map((product) => product.exportShare),
     [lensProducts],
   );
-  const animationKey = `${country?.iso3 ?? "ocean"}-${year}`;
+  const animationKey = `${settledReadout?.country.iso3 ?? "ocean"}-${settledReadout?.year ?? year}`;
   const animatedPercentages = useAnimatedPercentages(targetPercentages, animationKey);
   const center = { x: size.width / 2, y: size.height * (mobile ? 0.43 : 0.48) };
   const lensRadius = mobile ? 78 : Math.min(118, Math.max(96, size.height * 0.14));
@@ -246,7 +271,7 @@ export function TradeLens({
         </g>
 
         <g className="trade-readouts" aria-label="Leading HS4 products as a share of total merchandise exports">
-          {lensProducts.map((product, index) => {
+          {readoutReady && lensProducts.map((product, index) => {
             const degrees = startAngle + index * angleStep;
             const angle = degrees * Math.PI / 180;
             const stemStart = lensRadius + (mobile ? 13 : 17);
@@ -323,7 +348,7 @@ export function TradeLens({
         </g>
       </svg>
 
-      {country && otherBreakdown.length > 0 && (
+      {readoutReady && country && otherBreakdown.length > 0 && (
         <section
           className={`other-breakdown${otherExpanded ? " is-open" : ""}`}
           style={{

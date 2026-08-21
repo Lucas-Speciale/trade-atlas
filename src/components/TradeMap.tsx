@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, MapGeoJSONFeature } from "maplibre-gl";
 
@@ -23,8 +24,16 @@ const FILL_LAYER = "trade-country-fill";
 const ACTIVE_FILL_LAYER = "trade-country-active-fill";
 const ACTIVE_LINE_LAYER = "trade-country-active-line";
 const HOVER_LINE_LAYER = "trade-country-hover-line";
+const SHOWCASE_CYCLE_MS = 24_000;
+const SHOWCASE_TOUR = [
+  { delay: 3_000, center: [10.45, 51.17] as [number, number], duration: 2_400 },
+  { delay: 8_500, center: [104.2, 35.9] as [number, number], duration: 2_600 },
+  { delay: 14_200, center: [10.45, 51.17] as [number, number], duration: 2_600 },
+  { delay: 19_800, center: [-98.58, 39.83] as [number, number], duration: 2_400 },
+];
 
 interface TradeMapProps {
+  showcase: boolean;
   geometry: TradeGeometry;
   mode: ExplorerMode;
   activeIso3: string;
@@ -36,6 +45,7 @@ interface TradeMapProps {
   focusRequest: { iso3: string; center: [number, number]; zoom?: number; nonce: number } | null;
   onClearRoute: () => void;
   onCountryFocus: (iso3: string | null) => void;
+  onLensMotionChange: (moving: boolean) => void;
 }
 
 interface TooltipState {
@@ -62,6 +72,7 @@ interface HitCountry {
 interface ProjectedRoute {
   partner: TradeRoutePartner;
   path: string;
+  points: { x: number; y: number }[];
   end: { x: number; y: number };
 }
 
@@ -144,6 +155,7 @@ function fillExpression(
 }
 
 export function TradeMap({
+  showcase,
   geometry,
   mode,
   activeIso3,
@@ -155,6 +167,7 @@ export function TradeMap({
   focusRequest,
   onClearRoute,
   onCountryFocus,
+  onLensMotionChange,
 }: TradeMapProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -162,6 +175,7 @@ export function TradeMap({
   const selectionFrameRef = useRef<number | null>(null);
   const suppressLensSelectionRef = useRef(false);
   const onCountryFocusRef = useRef(onCountryFocus);
+  const onLensMotionChangeRef = useRef(onLensMotionChange);
   const modeRef = useRef(mode);
   const activeIso3Ref = useRef(activeIso3);
   const focusRequestRef = useRef(focusRequest);
@@ -176,6 +190,10 @@ export function TradeMap({
   useEffect(() => {
     onCountryFocusRef.current = onCountryFocus;
   }, [onCountryFocus]);
+
+  useEffect(() => {
+    onLensMotionChangeRef.current = onLensMotionChange;
+  }, [onLensMotionChange]);
 
   useEffect(() => {
     modeRef.current = mode;
@@ -206,6 +224,31 @@ export function TradeMap({
     const frame = requestAnimationFrame(() => projectRoutesRef.current?.());
     return () => cancelAnimationFrame(frame);
   }, [routeFlow]);
+
+  useEffect(() => {
+    if (!showcase || mode !== "country") return;
+
+    const timers = new Set<number>();
+    const scheduleMove = (delay: number, center: [number, number], duration: number) => {
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
+        mapRef.current?.easeTo({ center, zoom: 2.2, duration, essential: true });
+      }, delay);
+      timers.add(timer);
+    };
+
+    const scheduleTour = () => {
+      SHOWCASE_TOUR.forEach(({ delay, center, duration }) => scheduleMove(delay, center, duration));
+    };
+
+    scheduleTour();
+    const cycle = window.setInterval(scheduleTour, SHOWCASE_CYCLE_MS);
+
+    return () => {
+      window.clearInterval(cycle);
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [mode, showcase]);
 
   useEffect(() => {
     if (!frameRef.current || mapRef.current) return;
@@ -247,9 +290,13 @@ export function TradeMap({
       });
       const curves = makeRouteFan(origin, projectedPartners.map(({ endpoint }) => endpoint));
       const routes = projectedPartners.map(({ partner, endpoint }, index) => {
+        const points = flow.direction === "exports"
+          ? curves[index].points
+          : [...curves[index].points].reverse();
         return {
           partner,
           path: flow.direction === "exports" ? curves[index].path : curves[index].reversePath,
+          points,
           end: endpoint,
         };
       });
@@ -353,9 +400,13 @@ export function TradeMap({
         paint: { "line-color": "#273530", "line-width": 0.9, "line-opacity": 0.68 },
       });
       readyRef.current = true;
-      map.on("move", requestLensSelection);
+      map.on("movestart", () => onLensMotionChangeRef.current(true));
+      if (!showcase) map.on("move", requestLensSelection);
       map.on("move", projectRoutes);
-      map.on("moveend", selectAtLens);
+      map.on("moveend", () => {
+        selectAtLens();
+        onLensMotionChangeRef.current(false);
+      });
       map.on("resize", projectRoutes);
       map.on("mousemove", FILL_LAYER, handleHover);
       map.on("mouseleave", FILL_LAYER, clearHover);
@@ -383,7 +434,7 @@ export function TradeMap({
       map.remove();
       mapRef.current = null;
     };
-  }, [geometry, hitCountries]);
+  }, [geometry, hitCountries, showcase]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -451,43 +502,53 @@ export function TradeMap({
           aria-hidden="true"
         >
           <g key={routeFlow.key} className="trade-route-paths">
-            {routeProjection.routes.map((route, index) => (
-              <g key={route.partner.iso3}>
-                <path
-                  className="trade-route-shadow"
-                  d={route.path}
-                  pathLength={1}
-                  style={{
-                    animationDelay: `${index * 55}ms`,
-                    strokeWidth: routeLineWidth(route.partner.share) + 4,
-                  }}
-                />
-                <path
-                  className="trade-route-line"
-                  d={route.path}
-                  pathLength={1}
-                  style={{
-                    animationDelay: `${index * 55}ms`,
-                    strokeWidth: routeLineWidth(route.partner.share),
-                  }}
-                />
-                <circle className="trade-route-particle" r={2.2}>
-                  <animateMotion
-                    path={route.path}
-                    begin={`${0.75 + index * 0.08}s`}
-                    dur={`${2.1 + index * 0.07}s`}
-                    repeatCount="indefinite"
+            {routeProjection.routes.map((route, index) => {
+              const routeLength = route.points.slice(1).reduce((length, point, pointIndex) => {
+                const previous = route.points[pointIndex];
+                return length + Math.hypot(point.x - previous.x, point.y - previous.y);
+              }, 0);
+              const routeAnimationStyle = {
+                animationDelay: `${index * 55}ms`,
+                strokeDasharray: routeLength,
+                strokeDashoffset: routeLength,
+              } as CSSProperties;
+
+              return (
+                <g key={route.partner.iso3}>
+                  <path
+                    className="trade-route-shadow"
+                    d={route.path}
+                    style={{
+                      ...routeAnimationStyle,
+                      strokeWidth: routeLineWidth(route.partner.share) + 4,
+                    }}
                   />
-                </circle>
-                <circle
-                  className="trade-route-endpoint"
-                  cx={route.end.x}
-                  cy={route.end.y}
-                  r={2.4 + Math.sqrt(route.partner.share) * 4}
-                  style={{ animationDelay: `${500 + index * 55}ms` }}
-                />
-              </g>
-            ))}
+                  <path
+                    className="trade-route-line"
+                    d={route.path}
+                    style={{
+                      ...routeAnimationStyle,
+                      strokeWidth: routeLineWidth(route.partner.share),
+                    }}
+                  />
+                  <circle className="trade-route-particle" r={2.2}>
+                    <animateMotion
+                      path={route.path}
+                      begin={`${0.75 + index * 0.08}s`}
+                      dur={`${2.1 + index * 0.07}s`}
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                  <circle
+                    className="trade-route-endpoint"
+                    cx={route.end.x}
+                    cy={route.end.y}
+                    r={2.4 + Math.sqrt(route.partner.share) * 4}
+                    style={{ animationDelay: `${500 + index * 55}ms` }}
+                  />
+                </g>
+              );
+            })}
             <circle
               className="trade-route-origin-halo"
               cx={routeProjection.origin.x}

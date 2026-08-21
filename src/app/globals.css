@@ -74,8 +74,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .trade-route-shadow,
 .trade-route-line {
   fill: none;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -1081,6 +1079,23 @@ dd {
   pointer-events: none;
 }
 
+.showcase-mode .brand-panel,
+.showcase-mode .view-dock,
+.showcase-mode .guide-popover,
+.showcase-mode .map-legend,
+.showcase-mode .year-carousel,
+.showcase-mode .data-note,
+.showcase-mode .trade-route-panel,
+.showcase-mode .trade-route-status,
+.showcase-mode .maplibregl-control-container,
+.showcase-mode .country-facts,
+.showcase-mode .other-breakdown {
+  display: none;
+}
+
+.showcase-mode .map-canvas,
+.showcase-mode .maplibregl-canvas { cursor: default; }
+
 .loading-state,
 .fatal-state {
   min-height: 100svh;
@@ -1111,7 +1126,6 @@ dd {
   to { stroke-dashoffset: 0; }
 }
 @keyframes route-path-draw {
-  from { stroke-dashoffset: 1; }
   to { stroke-dashoffset: 0; }
 }
 @keyframes route-node-arrive {

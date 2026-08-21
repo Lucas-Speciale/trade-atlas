@@ -64,6 +64,7 @@ interface BaseData {
 }
 
 interface InitialState {
+  showcase: boolean;
   mode: ExplorerMode;
   year: number;
   country: string;
@@ -80,6 +81,7 @@ async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 function getInitialState(): InitialState {
   if (typeof window === "undefined") {
     return {
+      showcase: false,
       mode: "country",
       year: 2023,
       country: "USA",
@@ -91,6 +93,7 @@ function getInitialState(): InitialState {
   const metricIds = new Set(METRICS.map((item) => item.id));
   const metric = params.get("metric") as OverlayMetric | null;
   return {
+    showcase: params.get("showcase") === "1",
     mode: params.get("mode") === "overlay" ? "overlay" : "country",
     year: Number(params.get("year")) || 2023,
     country: params.get("country")?.toUpperCase() || "USA",
@@ -115,6 +118,7 @@ export function TradeExplorer() {
   const [activeIso3, setActiveIso3] = useState(initial.country);
   const [selectionId, setSelectionId] = useState(initial.product);
   const [metric, setMetric] = useState<OverlayMetric>(initial.metric);
+  const [lensMoving, setLensMoving] = useState(true);
   const [focusRequest, setFocusRequest] = useState<{
     iso3: string;
     center: [number, number];
@@ -123,7 +127,9 @@ export function TradeExplorer() {
   } | null>(null);
   const [loadingYear, setLoadingYear] = useState(false);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
-  const [routeCountryIso3, setRouteCountryIso3] = useState<string | null>(null);
+  const [routeCountryIso3, setRouteCountryIso3] = useState<string | null>(
+    initial.showcase && initial.mode === "overlay" ? initial.country : null,
+  );
   const [routeError, setRouteError] = useState<string | null>(null);
   const [countryQuery, setCountryQuery] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -288,7 +294,7 @@ export function TradeExplorer() {
   }, [geometryByCountry, initial.country, initial.mode]);
 
   useEffect(() => {
-    if (!base || !selectedProduct) return;
+    if (!base || !selectedProduct || initial.showcase) return;
     const params = new URLSearchParams({
       mode,
       year: String(year),
@@ -297,7 +303,7 @@ export function TradeExplorer() {
       metric,
     });
     window.history.replaceState(null, "", `?${params.toString()}`);
-  }, [base, metric, mode, resolvedIso3, selectedProduct, year]);
+  }, [base, initial.showcase, metric, mode, resolvedIso3, selectedProduct, year]);
 
   useEffect(() => {
     if (!selectedProduct || selectedProduct.kind !== "hs4") return;
@@ -543,9 +549,10 @@ export function TradeExplorer() {
   ));
 
   return (
-    <main className={`trade-app mode-${mode}`}>
+    <main className={`trade-app mode-${mode}${initial.showcase ? " showcase-mode" : ""}`}>
       <section className="map-stage" aria-label="Trade Atlas explorer">
         <TradeMap
+          showcase={initial.showcase}
           geometry={base.geometry}
           mode={mode}
           activeIso3={resolvedIso3}
@@ -556,6 +563,7 @@ export function TradeExplorer() {
           routeError={mode === "overlay" && routeCountryIso3 ? routeError : null}
           focusRequest={focusRequest ?? initialFocusRequest}
           onClearRoute={() => setRouteCountryIso3(null)}
+          onLensMotionChange={setLensMoving}
           onCountryFocus={(iso3) => {
             if (iso3) {
               selectCountry(iso3);
@@ -678,6 +686,7 @@ export function TradeExplorer() {
             destinationName={destinationName}
             year={year}
             provisional={yearData.provisional}
+            moving={lensMoving}
             onSelectProduct={(hs4) => {
               setSelectionId(`hs4:${hs4}`);
               selectMode("overlay");
