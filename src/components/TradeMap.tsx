@@ -23,12 +23,12 @@ const FILL_LAYER = "trade-country-fill";
 const ACTIVE_FILL_LAYER = "trade-country-active-fill";
 const ACTIVE_LINE_LAYER = "trade-country-active-line";
 const HOVER_LINE_LAYER = "trade-country-hover-line";
-const SHOWCASE_CYCLE_MS = 24_000;
+const SHOWCASE_CYCLE_MS = 23_000;
 const SHOWCASE_TOUR = [
-  { delay: 3_000, center: [10.45, 51.17] as [number, number], duration: 2_400 },
-  { delay: 8_500, center: [104.2, 35.9] as [number, number], duration: 2_600 },
-  { delay: 14_200, center: [10.45, 51.17] as [number, number], duration: 2_600 },
-  { delay: 19_800, center: [-98.58, 39.83] as [number, number], duration: 2_400 },
+  { delay: 2_000, center: [10.45, 51.17] as [number, number], duration: 2_400 },
+  { delay: 7_500, center: [104.2, 35.9] as [number, number], duration: 2_600 },
+  { delay: 13_200, center: [10.45, 51.17] as [number, number], duration: 2_600 },
+  { delay: 18_800, center: [-98.58, 39.83] as [number, number], duration: 2_400 },
 ];
 
 interface TradeMapProps {
@@ -183,6 +183,8 @@ export function TradeMap({
   const [hoveredIso3, setHoveredIso3] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [routeProjection, setRouteProjection] = useState<RouteProjection | null>(null);
+  const [showcaseReady, setShowcaseReady] = useState(false);
+  const [showcaseStarted, setShowcaseStarted] = useState(false);
   const hitCountries = useMemo(() => prepareHitCountries(geometry), [geometry]);
 
   useEffect(() => {
@@ -224,7 +226,7 @@ export function TradeMap({
   }, [routeFlow]);
 
   useEffect(() => {
-    if (!showcase || mode !== "country") return;
+    if (!showcase || mode !== "country" || !showcaseReady || !showcaseStarted) return;
 
     const timers = new Set<number>();
     const scheduleMove = (delay: number, center: [number, number], duration: number) => {
@@ -246,17 +248,33 @@ export function TradeMap({
       window.clearInterval(cycle);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [mode, showcase]);
+  }, [mode, showcase, showcaseReady, showcaseStarted]);
+
+  useEffect(() => {
+    if (!showcase) return;
+    const startShowcase = (event: MessageEvent) => {
+      if (
+        event.source === window.parent
+        && event.data?.type === "showcase-start"
+        && event.data.app === "trade-atlas"
+      ) {
+        setShowcaseStarted(true);
+      }
+    };
+    window.addEventListener("message", startShowcase);
+    return () => window.removeEventListener("message", startShowcase);
+  }, [showcase]);
 
   useEffect(() => {
     if (!frameRef.current || mapRef.current) return;
 
     maplibregl.setWorkerUrl(MAPLIBRE_WORKER_URL);
+    const initialMapFocus = showcase && modeRef.current === "country" ? focusRequestRef.current : null;
     const map = new maplibregl.Map({
       container: frameRef.current,
       style: MAP_STYLE,
-      center: [5, 22],
-      zoom: 1.45,
+      center: initialMapFocus?.center ?? [5, 22],
+      zoom: initialMapFocus?.zoom ?? 1.45,
       minZoom: 1,
       maxZoom: 5,
       pitch: 0,
@@ -410,6 +428,18 @@ export function TradeMap({
       const pendingFocus = focusRequestRef.current;
       if (pendingFocus) {
         map.jumpTo({ center: pendingFocus.center, zoom: pendingFocus.zoom ?? Math.max(map.getZoom(), 2.2) });
+      }
+      if (showcase) {
+        map.once("idle", () => {
+          requestAnimationFrame(() => {
+            setShowcaseReady(true);
+            if (window.parent === window) {
+              setShowcaseStarted(true);
+            } else {
+              window.parent.postMessage({ type: "showcase-ready", app: "trade-atlas" }, "*");
+            }
+          });
+        });
       }
     };
 
