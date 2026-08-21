@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, MapGeoJSONFeature } from "maplibre-gl";
 
@@ -72,7 +71,6 @@ interface HitCountry {
 interface ProjectedRoute {
   partner: TradeRoutePartner;
   path: string;
-  points: { x: number; y: number }[];
   end: { x: number; y: number };
 }
 
@@ -290,13 +288,9 @@ export function TradeMap({
       });
       const curves = makeRouteFan(origin, projectedPartners.map(({ endpoint }) => endpoint));
       const routes = projectedPartners.map(({ partner, endpoint }, index) => {
-        const points = flow.direction === "exports"
-          ? curves[index].points
-          : [...curves[index].points].reverse();
         return {
           partner,
           path: flow.direction === "exports" ? curves[index].path : curves[index].reversePath,
-          points,
           end: endpoint,
         };
       });
@@ -502,24 +496,12 @@ export function TradeMap({
           aria-hidden="true"
         >
           <g key={routeFlow.key} className="trade-route-paths">
-            {routeProjection.routes.map((route, index) => {
-              const routeLength = route.points.slice(1).reduce((length, point, pointIndex) => {
-                const previous = route.points[pointIndex];
-                return length + Math.hypot(point.x - previous.x, point.y - previous.y);
-              }, 0);
-              const routeAnimationStyle = {
-                animationDelay: `${index * 55}ms`,
-                strokeDasharray: routeLength,
-                strokeDashoffset: routeLength,
-              } as CSSProperties;
-
-              return (
+            {routeProjection.routes.map((route, index) => (
                 <g key={route.partner.iso3}>
                   <path
                     className="trade-route-shadow"
                     d={route.path}
                     style={{
-                      ...routeAnimationStyle,
                       strokeWidth: routeLineWidth(route.partner.share) + 4,
                     }}
                   />
@@ -527,7 +509,6 @@ export function TradeMap({
                     className="trade-route-line"
                     d={route.path}
                     style={{
-                      ...routeAnimationStyle,
                       strokeWidth: routeLineWidth(route.partner.share),
                     }}
                   />
@@ -547,8 +528,7 @@ export function TradeMap({
                     style={{ animationDelay: `${500 + index * 55}ms` }}
                   />
                 </g>
-              );
-            })}
+            ))}
             <circle
               className="trade-route-origin-halo"
               cx={routeProjection.origin.x}
