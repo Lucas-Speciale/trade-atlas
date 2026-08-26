@@ -24,7 +24,7 @@ import duckdb
 ROOT = Path(__file__).resolve().parents[1]
 BACI_ZIP = ROOT / "data/raw/BACI_HS17_V202601.zip"
 WORLD_BANK_ZIP = ROOT / "data/raw/world-bank/wb_boundaries_geojson_lowres.zip"
-WORLD_BANK_TAIWAN = ROOT / "data/raw/world-bank/taiwan.geojson"
+NATURAL_EARTH_TAIWAN = ROOT / "data/raw/natural-earth/taiwan.geojson"
 OEC_HS2_JSON = ROOT / "data/raw/oec/hs2-members.json"
 OEC_HS4_JSON = ROOT / "data/raw/oec/hs4-members.json"
 CROSSWALK_CSV = ROOT / "data/country-crosswalk.csv"
@@ -253,7 +253,7 @@ def build_geometry(countries: dict[int, Country], overrides: dict[str, str]) -> 
 
     with zipfile.ZipFile(WORLD_BANK_ZIP) as archive:
         payload = json.loads(archive.read(WORLD_BANK_MEMBER))
-    payload["features"].append(json.loads(WORLD_BANK_TAIWAN.read_text(encoding="utf-8")))
+    payload["features"].append(json.loads(NATURAL_EARTH_TAIWAN.read_text(encoding="utf-8")))
     for source_feature in payload["features"]:
         props = source_feature["properties"]
         geometry = source_feature.get("geometry")
@@ -685,7 +685,7 @@ def main() -> None:
     for required in (
         BACI_ZIP,
         WORLD_BANK_ZIP,
-        WORLD_BANK_TAIWAN,
+        NATURAL_EARTH_TAIWAN,
         OEC_HS2_JSON,
         OEC_HS4_JSON,
         CROSSWALK_CSV,
